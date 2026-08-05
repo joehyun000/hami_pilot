@@ -1,0 +1,28 @@
+ARG HAMI_BUILD_IMAGE=nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
+ARG PYTORCH_IMAGE=pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+
+FROM ${HAMI_BUILD_IMAGE} AS hami-builder
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential cmake git \
+    && rm -rf /var/lib/apt/lists/*
+COPY .cache/sources/HAMi-core-5091a2f /src/HAMi-core
+WORKDIR /src/HAMi-core
+RUN bash ./build.sh
+
+FROM ${PYTORCH_IMAGE}
+ENV DEBIAN_FRONTEND=noninteractive
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential git \
+    && rm -rf /var/lib/apt/lists/*
+COPY .cache/sources/inference-v5.1.1 /opt/mlperf/inference
+RUN python3 -m pip install --no-cache-dir \
+      "absl-py>=2,<3" "numpy<2" "pybind11>=2.12,<3" "transformers==4.46.3" \
+    && python3 -m pip install --no-cache-dir /opt/mlperf/inference/loadgen
+COPY --from=hami-builder /src/HAMi-core/build/libvgpu.so /opt/hami/libvgpu.so
+WORKDIR /opt/mlperf/inference/language/bert
+ENV LD_PRELOAD=/opt/hami/libvgpu.so
+ENTRYPOINT ["python3", "run.py"]
+

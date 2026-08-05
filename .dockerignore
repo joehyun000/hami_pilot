@@ -1,0 +1,8 @@
+.git
+.venv
+runs
+artifacts
+**/__pycache__
+**/*.pyc
+.cache/sources/HAMi-core
+.cache/sources/inference

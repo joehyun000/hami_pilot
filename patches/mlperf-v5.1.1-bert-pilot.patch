@@ -1,0 +1,60 @@
+diff --git a/language/bert/pytorch_SUT.py b/language/bert/pytorch_SUT.py
+index 89660c9..fc9dd09 100644
+--- a/language/bert/pytorch_SUT.py
++++ b/language/bert/pytorch_SUT.py
+@@ -119,6 +119,9 @@ class BERT_PyTorch_SUT:
+                 .numpy()
+             )
+ 
++            if query_id is None:
++                return output
++
+             if self.network == "sut":
+                 return output.tolist()
+ 
+diff --git a/language/bert/run.py b/language/bert/run.py
+index 5a35148..6f9afcb 100644
+--- a/language/bert/run.py
++++ b/language/bert/run.py
+@@ -22,6 +22,7 @@ import mlperf_loadgen as lg
+ import argparse
+ import os
+ import sys
++import time
+ 
+ sys.path.insert(0, os.getcwd())
+ sys.path.insert(0, os.path.join(os.getcwd(), "..", "..", "lon"))
+@@ -97,6 +98,25 @@ scenario_map = {
+ }
+ 
+ 
++def warmup_and_signal_ready(sut):
++    warmup_seconds = int(os.environ.get("HAMI_WARMUP_SECONDS", "0"))
++    if warmup_seconds < 0:
++        raise ValueError("HAMI_WARMUP_SECONDS must be nonnegative")
++    if warmup_seconds > 0:
++        sample = sut.qsl.get_features(0)
++        deadline = time.monotonic() + warmup_seconds
++        while time.monotonic() < deadline:
++            sut.process_sample(sample, query_id=None)
++        import torch
++
++        torch.cuda.synchronize()
++
++    ready_file = os.environ.get("HAMI_READY_FILE")
++    if ready_file:
++        fd = os.open(ready_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
++        os.close(fd)
++
++
+ def main():
+     args = get_args()
+ 
+@@ -194,6 +214,7 @@ def main():
+         app.run(debug=False, port=args.port, host="0.0.0.0")
+ 
+     else:
++        warmup_and_signal_ready(sut)
+         print("Running LoadGen test...")
+         lg.StartTestWithLogSettings(
+             sut.sut, sut.qsl.qsl, settings, log_settings, args.audit_conf
