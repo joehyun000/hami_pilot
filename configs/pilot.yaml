@@ -1,0 +1,23 @@
+seed: 20260805
+blocks: 5
+warmup_seconds: 60
+victim_duration_seconds: 300
+neighbor_duration_seconds: 600
+victim_target_qps: null
+conditions:
+  - name: P0
+    victim_sm_limit: 100
+    neighbor_enabled: false
+    neighbor_sm_limit: null
+  - name: P1
+    victim_sm_limit: 50
+    neighbor_enabled: false
+    neighbor_sm_limit: null
+  - name: P2
+    victim_sm_limit: 100
+    neighbor_enabled: true
+    neighbor_sm_limit: 100
+  - name: P3
+    victim_sm_limit: 50
+    neighbor_enabled: true
+    neighbor_sm_limit: 50
