@@ -34,6 +34,15 @@ def test_build_script_reports_the_versioned_image_tag_without_docker_access():
     assert result.stdout.strip() == "hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0"
 
 
+def test_build_script_distinguishes_probe_and_vanilla_images_for_overhead_ablation():
+    result = run_script("scripts/build_images.sh", "--print-tags")
+
+    assert json.loads(result.stdout) == {
+        "probe": "hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0",
+        "vanilla": "hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0-vanilla",
+    }
+
+
 def test_shell_scripts_are_valid_bash_programs():
     for relative_path in ("scripts/bootstrap_sources.sh", "scripts/build_images.sh"):
         subprocess.run(["bash", "-n", str(ROOT / relative_path)], check=True)

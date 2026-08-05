@@ -2,11 +2,12 @@ ARG HAMI_BUILD_IMAGE=nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
 ARG PYTORCH_IMAGE=pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
 
 FROM ${HAMI_BUILD_IMAGE} AS hami-builder
+ARG HAMI_CORE_SOURCE=.cache/sources/HAMi-core-5091a2f
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential cmake git \
     && rm -rf /var/lib/apt/lists/*
-COPY .cache/sources/HAMi-core-5091a2f /src/HAMi-core
+COPY ${HAMI_CORE_SOURCE} /src/HAMi-core
 WORKDIR /src/HAMi-core
 RUN bash ./build.sh
 
@@ -25,4 +26,3 @@ COPY --from=hami-builder /src/HAMi-core/build/libvgpu.so /opt/hami/libvgpu.so
 WORKDIR /opt/mlperf/inference/language/bert
 ENV LD_PRELOAD=/opt/hami/libvgpu.so
 ENTRYPOINT ["python3", "run.py"]
-

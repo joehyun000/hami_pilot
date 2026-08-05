@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE_TAG="hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0"
+PROBE_IMAGE_TAG="hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0"
+VANILLA_IMAGE_TAG="hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0-vanilla"
 
 if [[ "${1:-}" == "--print-tag" ]]; then
-  printf '%s\n' "$IMAGE_TAG"
+  printf '%s\n' "$PROBE_IMAGE_TAG"
+  exit 0
+fi
+
+if [[ "${1:-}" == "--print-tags" ]]; then
+  printf '{"probe":"%s","vanilla":"%s"}\n' "$PROBE_IMAGE_TAG" "$VANILLA_IMAGE_TAG"
   exit 0
 fi
 
@@ -18,8 +24,15 @@ fi
 
 docker build \
   --file "$PILOT_ROOT/docker/Dockerfile.bert" \
-  --tag "$IMAGE_TAG" \
+  --build-arg "HAMI_CORE_SOURCE=.cache/sources/HAMi-core-5091a2f" \
+  --tag "$PROBE_IMAGE_TAG" \
   "$PILOT_ROOT"
 
-docker image inspect "$IMAGE_TAG" --format '{{.Id}}'
+docker build \
+  --file "$PILOT_ROOT/docker/Dockerfile.bert" \
+  --build-arg "HAMI_CORE_SOURCE=.cache/sources/HAMi-core-5091a2f-vanilla" \
+  --tag "$VANILLA_IMAGE_TAG" \
+  "$PILOT_ROOT"
 
+docker image inspect "$PROBE_IMAGE_TAG" --format '{{.Id}}'
+docker image inspect "$VANILLA_IMAGE_TAG" --format '{{.Id}}'

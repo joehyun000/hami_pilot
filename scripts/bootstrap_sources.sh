@@ -17,6 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PILOT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SOURCE_ROOT="$PILOT_ROOT/.cache/sources"
 HAMI_CORE_DIR="$SOURCE_ROOT/HAMi-core-5091a2f"
+HAMI_CORE_VANILLA_DIR="$SOURCE_ROOT/HAMi-core-5091a2f-vanilla"
 MLPERF_DIR="$SOURCE_ROOT/inference-v5.1.1"
 
 mkdir -p "$SOURCE_ROOT" "$PILOT_ROOT/artifacts"
@@ -63,6 +64,7 @@ ensure_checkout "https://github.com/Project-HAMi/HAMi-core.git" "$HAMI_CORE_COMM
 install -m 0644 "$PILOT_ROOT/probe/hami_probe_counter.h" \
   "$HAMI_CORE_DIR/src/multiprocess/hami_probe_counter.h"
 apply_once "$HAMI_CORE_DIR" "$PILOT_ROOT/patches/hami-core-5091a2f-probe.patch"
+ensure_checkout "https://github.com/Project-HAMi/HAMi-core.git" "$HAMI_CORE_COMMIT" "$HAMI_CORE_VANILLA_DIR"
 
 ensure_checkout "https://github.com/mlcommons/inference.git" "$MLPERF_COMMIT" "$MLPERF_DIR"
 apply_once "$MLPERF_DIR" "$PILOT_ROOT/patches/mlperf-v5.1.1-bert-pilot.patch"
@@ -72,4 +74,3 @@ python3 -c 'import json,pathlib,sys; pathlib.Path(sys.argv[1]).write_text(json.d
   "$MANIFEST" "$HAMI_RELEASE" "$HAMI_COMMIT" "$HAMI_CORE_COMMIT" "$MLPERF_RELEASE" "$MLPERF_COMMIT"
 
 printf 'Prepared pinned sources under %s\n' "$SOURCE_ROOT"
-
