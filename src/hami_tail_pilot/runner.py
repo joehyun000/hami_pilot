@@ -15,6 +15,7 @@ from hami_tail_pilot.schedule import RunSpec
 
 
 DEFAULT_IMAGE_TAG = "hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0"
+DEFAULT_VANILLA_IMAGE_TAG = "hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0-vanilla"
 DEFAULT_TELEMETRY_COMMAND = (
     "nvidia-smi",
     "--query-gpu=timestamp,index,utilization.gpu,memory.used,power.draw,clocks.sm",
@@ -59,7 +60,9 @@ def build_container_command(
     assets: RuntimeAssets,
 ) -> list[str]:
     if config.victim_target_qps is None:
-        raise ValueError("victim_target_qps must be resolved before building a run command")
+        raise ValueError(
+            "victim_target_qps must be resolved before building a run command"
+        )
     if role not in {"victim", "neighbor"}:
         raise ValueError("role must be victim or neighbor")
 
@@ -119,11 +122,15 @@ def build_container_command(
 
 def _write_json_atomic(path: Path, payload: dict) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     os.replace(temporary, path)
 
 
-def _start_process(command: Sequence[str], output_dir: Path, handles: list[IO[str]]) -> subprocess.Popen:
+def _start_process(
+    command: Sequence[str], output_dir: Path, handles: list[IO[str]]
+) -> subprocess.Popen:
     output_dir.mkdir(parents=True, exist_ok=True)
     stdout = (output_dir / "stdout.log").open("w", encoding="utf-8")
     stderr = (output_dir / "stderr.log").open("w", encoding="utf-8")
@@ -131,7 +138,9 @@ def _start_process(command: Sequence[str], output_dir: Path, handles: list[IO[st
     return subprocess.Popen(list(command), stdout=stdout, stderr=stderr, text=True)
 
 
-def _stop_process(process: subprocess.Popen | None, timeout_seconds: float = 2.0) -> None:
+def _stop_process(
+    process: subprocess.Popen | None, timeout_seconds: float = 2.0
+) -> None:
     if process is None or process.poll() is not None:
         return
     process.terminate()
@@ -142,7 +151,9 @@ def _stop_process(process: subprocess.Popen | None, timeout_seconds: float = 2.0
         process.wait(timeout=timeout_seconds)
 
 
-def _wait_until_ready(process: subprocess.Popen, ready_file: Path, timeout_seconds: float) -> None:
+def _wait_until_ready(
+    process: subprocess.Popen, ready_file: Path, timeout_seconds: float
+) -> None:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         if ready_file.is_file():
@@ -203,13 +214,19 @@ def run_spec(
 
         manifest["status"] = "running"
         _write_json_atomic(run_dir / "manifest.json", manifest)
-        _write_json_atomic(run_dir / "status.json", {"status": "running", "error": None})
+        _write_json_atomic(
+            run_dir / "status.json", {"status": "running", "error": None}
+        )
 
         if telemetry_command is not None:
-            telemetry = _start_process(telemetry_command, run_dir / "telemetry", handles)
+            telemetry = _start_process(
+                telemetry_command, run_dir / "telemetry", handles
+            )
 
         if spec.condition.neighbor_enabled:
-            neighbor_command = command_builder("neighbor", spec, config, run_dir, assets)
+            neighbor_command = command_builder(
+                "neighbor", spec, config, run_dir, assets
+            )
             neighbor = _start_process(neighbor_command, run_dir / "neighbor", handles)
             _wait_until_ready(
                 neighbor,
@@ -223,7 +240,9 @@ def run_spec(
         if victim_code != 0:
             raise RuntimeError(f"victim exited with code {victim_code}")
         if neighbor is not None and neighbor.poll() is not None:
-            raise RuntimeError(f"neighbor exited before victim completed with code {neighbor.returncode}")
+            raise RuntimeError(
+                f"neighbor exited before victim completed with code {neighbor.returncode}"
+            )
 
         status = "complete"
     except Exception as exc:

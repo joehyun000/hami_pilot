@@ -1,0 +1,9 @@
+{
+  "candidates": [
+    {"target_qps": 1.0, "summary": "/absolute/path/qps-1/mlperf_log_summary.txt"},
+    {"target_qps": 2.0, "summary": "/absolute/path/qps-2/mlperf_log_summary.txt"},
+    {"target_qps": 4.0, "summary": "/absolute/path/qps-4/mlperf_log_summary.txt"}
+  ],
+  "probe_off_p99_ms": [100.0, 101.0, 99.0],
+  "probe_on_p99_ms": [102.0, 103.0, 101.0]
+}

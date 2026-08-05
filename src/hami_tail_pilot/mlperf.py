@@ -41,14 +41,20 @@ def _extract(text: str, label: str, pattern: str) -> str:
     return match.group(1)
 
 
-def parse_mlperf_summary(path: Path) -> MLPerfMetrics:
+def parse_mlperf_summary(
+    path: Path,
+    *,
+    require_valid: bool = True,
+) -> MLPerfMetrics:
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
         raise MLPerfLogError(f"cannot read MLPerf summary: {exc}") from exc
 
     validity = _extract(text, "result validity", r"^Result is\s*:\s*(\S+)\s*$")
-    if validity != "VALID":
+    if validity not in {"VALID", "INVALID"}:
+        raise MLPerfLogError(f"unknown result validity: {validity}")
+    if require_valid and validity != "VALID":
         raise MLPerfLogError(f"result is not VALID: {validity}")
 
     throughput = float(
@@ -76,7 +82,9 @@ def parse_mlperf_summary(path: Path) -> MLPerfMetrics:
         _extract(text, "completed samples", r"^Completed samples\s*:\s*(\d+)\s*$")
     )
 
-    if not all(math.isfinite(value) and value >= 0 for value in (throughput, p50_ns, p99_ns)):
+    if not all(
+        math.isfinite(value) and value >= 0 for value in (throughput, p50_ns, p99_ns)
+    ):
         raise MLPerfLogError("metrics must be finite and nonnegative")
     if throughput <= 0:
         raise MLPerfLogError("completed samples per second must be positive")

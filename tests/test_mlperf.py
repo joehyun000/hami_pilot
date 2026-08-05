@@ -2,7 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from hami_tail_pilot.mlperf import MLPerfLogError, parse_mlperf_summary, render_user_conf
+from hami_tail_pilot.mlperf import (
+    MLPerfLogError,
+    parse_mlperf_summary,
+    render_user_conf,
+)
 
 
 def test_render_user_conf_fixes_qps_and_measurement_duration():
@@ -21,6 +25,23 @@ def test_parse_mlperf_summary_reads_valid_server_metrics():
     assert metrics.p50_ms == 8.125
     assert metrics.p99_ms == 43.75
     assert metrics.completed_samples == 3713
+
+
+def test_parse_mlperf_summary_can_retain_invalid_candidate_metrics(tmp_path):
+    path = tmp_path / "mlperf_log_summary.txt"
+    path.write_text(
+        "Result is : INVALID\n"
+        "Completed samples per second : 7.2\n"
+        "50.00 percentile latency (ns) : 10000000\n"
+        "99.00 percentile latency (ns) : 200000000\n"
+        "Completed samples : 1000\n",
+        encoding="utf-8",
+    )
+
+    metrics = parse_mlperf_summary(path, require_valid=False)
+
+    assert metrics.result_validity == "INVALID"
+    assert metrics.completed_samples_per_second == 7.2
 
 
 @pytest.mark.parametrize(
@@ -46,7 +67,9 @@ def test_parse_mlperf_summary_reads_valid_server_metrics():
         ),
     ],
 )
-def test_parse_mlperf_summary_rejects_incomplete_or_invalid_runs(tmp_path, text, message):
+def test_parse_mlperf_summary_rejects_incomplete_or_invalid_runs(
+    tmp_path, text, message
+):
     path = tmp_path / "mlperf_log_summary.txt"
     path.write_text(text, encoding="utf-8")
 
