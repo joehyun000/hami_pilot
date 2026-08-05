@@ -1,0 +1,13 @@
+================================================
+MLPerf Results Summary
+================================================
+SUT name : hami-tail-pilot
+Scenario : Server
+Mode : PerformanceOnly
+Completed samples per second : 12.375
+Result is : VALID
+50.00 percentile latency (ns) : 8125000
+90.00 percentile latency (ns) : 18125000
+99.00 percentile latency (ns) : 43750000
+Completed samples : 3713
+
