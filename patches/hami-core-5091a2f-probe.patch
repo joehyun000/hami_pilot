@@ -1,0 +1,72 @@
+diff --git a/src/multiprocess/multiprocess_utilization_watcher.c b/src/multiprocess/multiprocess_utilization_watcher.c
+index b4620d3..fb44533 100644
+--- a/src/multiprocess/multiprocess_utilization_watcher.c
++++ b/src/multiprocess/multiprocess_utilization_watcher.c
+@@ -23,6 +23,7 @@
+ #include "multiprocess/multiprocess_utilization_watcher.h"
+ #include "include/log_utils.h"
+ #include "include/nvml_override.h"
++#include "multiprocess/hami_probe_counter.h"
+ 
+ 
+ static int g_sm_num[CUDA_DEVICE_MAX_COUNT];
+@@ -36,7 +37,22 @@ int cuda_to_nvml_map_array[CUDA_DEVICE_MAX_COUNT];
+ static int cached_sm_limit[CUDA_DEVICE_MAX_COUNT] = {0};
+ static int cached_util_switch = 0;
+ 
++static uint64_t probe_elapsed_ns(struct timespec start, struct timespec end) {
++  if (end.tv_sec < start.tv_sec ||
++      (end.tv_sec == start.tv_sec && end.tv_nsec < start.tv_nsec)) {
++    return 0;
++  }
++  return (uint64_t)(end.tv_sec - start.tv_sec) * 1000000000ULL +
++         (uint64_t)(end.tv_nsec - start.tv_nsec);
++}
++
++__attribute__((destructor)) static void flush_hami_probe(void) {
++  hami_probe_flush();
++}
++
+ void rate_limiter(int grids, int blocks) {
++  hami_probe_record_limiter_call();
++
+   CUdevice current_device;
+   CUresult res = cuCtxGetDevice(&current_device);
+   int device_id = (res == CUDA_SUCCESS) ? (int)current_device : 0;
+@@ -44,6 +60,8 @@ void rate_limiter(int grids, int blocks) {
+   int64_t before_cuda_cores = 0;
+   int64_t after_cuda_cores = 0;
+   int64_t kernel_size = grids;
++  uint64_t probe_sleep_calls = 0;
++  uint64_t probe_wait_ns = 0;
+ 
+   /* Fast exit using cached values — no shared memory access needed */
+   if (cached_sm_limit[device_id] >= 100 || cached_sm_limit[device_id] == 0) {
+@@ -62,11 +80,22 @@ void rate_limiter(int grids, int blocks) {
+ CHECK:
+       before_cuda_cores = g_cur_cuda_cores[device_id];
+       if (before_cuda_cores < 0) {
++        struct timespec probe_start;
++        struct timespec probe_end;
++        int probe_clock_ok = clock_gettime(CLOCK_MONOTONIC, &probe_start) == 0;
+         nanosleep(&g_cycle, NULL);
++        probe_sleep_calls++;
++        if (probe_clock_ok && clock_gettime(CLOCK_MONOTONIC, &probe_end) == 0) {
++          probe_wait_ns += probe_elapsed_ns(probe_start, probe_end);
++        }
+         goto CHECK;
+       }
+       after_cuda_cores = before_cuda_cores - kernel_size;
+   } while (!CAS(&g_cur_cuda_cores[device_id], before_cuda_cores, after_cuda_cores));
++
++  if (probe_sleep_calls > 0) {
++    hami_probe_record_wait(probe_sleep_calls, probe_wait_ns);
++  }
+ }
+ 
+ static void change_token(int64_t delta, int device_id) {
+@@ -282,4 +311,3 @@ void init_utilization_watcher() {
+     }
+     return;
+ }
+-
