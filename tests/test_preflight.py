@@ -124,18 +124,34 @@ def test_run_preflight_rejects_missing_model_data(tmp_path):
     assert any("model.pytorch" in error for error in report.errors)
 
 
-def test_validate_smoke_probes_accepts_no_wait_baseline_and_waiting_quota_conditions():
+def test_validate_smoke_probes_accepts_expected_waits_for_each_role():
     no_wait = ProbeMetrics(100, 0, 0, 0)
     with_wait = ProbeMetrics(100, 5, 10, 100_000_000)
 
-    assert validate_smoke_probes({"P0": no_wait, "P1": with_wait, "P3": with_wait}) == ()
+    probes = {
+        "C1": {"victim": no_wait},
+        "C2": {"victim": with_wait},
+        "C3": {"victim": no_wait, "neighbor": no_wait},
+        "C4": {"victim": with_wait, "neighbor": no_wait},
+        "C5": {"victim": with_wait, "neighbor": with_wait},
+    }
+
+    assert validate_smoke_probes(probes) == ()
 
 
 def test_validate_smoke_probes_reports_wrong_manipulation_direction():
     no_wait = ProbeMetrics(100, 0, 0, 0)
     with_wait = ProbeMetrics(100, 5, 10, 100_000_000)
 
-    errors = validate_smoke_probes({"P0": with_wait, "P1": no_wait, "P3": with_wait})
+    probes = {
+        "C1": {"victim": with_wait},
+        "C2": {"victim": no_wait},
+        "C3": {"victim": no_wait, "neighbor": no_wait},
+        "C4": {"victim": with_wait, "neighbor": with_wait},
+        "C5": {"victim": with_wait, "neighbor": with_wait},
+    }
+    errors = validate_smoke_probes(probes)
 
-    assert "P0 recorded quota waits" in errors
-    assert "P1 did not record quota waits" in errors
+    assert "C1 victim recorded unexpected waits" in errors
+    assert "C2 victim did not record expected waits" in errors
+    assert "C4 neighbor recorded unexpected waits" in errors

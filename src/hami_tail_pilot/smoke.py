@@ -38,16 +38,17 @@ def execute_smoke(
         neighbor_duration_seconds=max(300, config.warmup_seconds + 120),
     )
     smoke_root = output_dir / "smoke"
+    smoke_names = ("C1", "C2", "C3", "C4", "C5")
     conditions = {
         condition.name: condition
         for condition in config.conditions
-        if condition.name in {"P0", "P1", "P3"}
+        if condition.name in smoke_names
     }
     errors: list[str] = []
-    probes: dict[str, ProbeMetrics] = {}
+    probes: dict[str, dict[str, ProbeMetrics]] = {}
     report_conditions: dict[str, dict] = {}
 
-    for order, name in enumerate(("P0", "P1", "P3"), start=1):
+    for order, name in enumerate(smoke_names, start=1):
         spec = RunSpec(0, order, conditions[name], f"smoke-{name}")
         result = run_one(spec, smoke_config, smoke_root, assets=assets)
         if result.status != "complete":
@@ -57,15 +58,19 @@ def execute_smoke(
             metrics = parse_mlperf_summary(
                 result.run_dir / "victim" / "mlperf_log_summary.txt"
             )
-            probe = parse_probe_jsonl(result.run_dir / "victim" / "hami_probe.jsonl")
+            roles = ("victim", "neighbor") if spec.condition.neighbor_enabled else ("victim",)
+            role_probes = {
+                role: parse_probe_jsonl(result.run_dir / role / "hami_probe.jsonl")
+                for role in roles
+            }
         except ValueError as exc:
             errors.append(f"{name} smoke output is invalid: {exc}")
             continue
-        probes[name] = probe
+        probes[name] = role_probes
         report_conditions[name] = {
             "p99_ms": metrics.p99_ms,
             "completed_samples_per_second": metrics.completed_samples_per_second,
-            "probe": asdict(probe),
+            "roles": {role: asdict(probe) for role, probe in role_probes.items()},
         }
 
     if not errors:

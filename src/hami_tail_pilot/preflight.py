@@ -34,16 +34,31 @@ class PreflightReport:
 CommandRunner = Callable[..., subprocess.CompletedProcess[str]]
 
 
-def validate_smoke_probes(probes: Mapping[str, ProbeMetrics]) -> tuple[str, ...]:
+def validate_smoke_probes(
+    probes: Mapping[str, Mapping[str, ProbeMetrics]],
+) -> tuple[str, ...]:
     errors: list[str] = []
-    required = {"P0", "P1", "P3"}
+    required = {"C1", "C2", "C3", "C4", "C5"}
     if set(probes) != required:
-        return ("smoke probes must contain exactly P0, P1, and P3",)
-    if probes["P0"].waited_calls > 0:
-        errors.append("P0 recorded quota waits")
-    for condition in ("P1", "P3"):
-        if probes[condition].waited_calls == 0:
-            errors.append(f"{condition} did not record quota waits")
+        return ("smoke probes must contain exactly C1, C2, C3, C4, and C5",)
+
+    expected_waits = {
+        "C1": {"victim": False},
+        "C2": {"victim": True},
+        "C3": {"victim": False, "neighbor": False},
+        "C4": {"victim": True, "neighbor": False},
+        "C5": {"victim": True, "neighbor": True},
+    }
+    for condition, roles in expected_waits.items():
+        if set(probes[condition]) != set(roles):
+            errors.append(f"{condition} smoke probes have the wrong roles")
+            continue
+        for role, should_wait in roles.items():
+            waited = probes[condition][role].waited_calls > 0
+            if should_wait and not waited:
+                errors.append(f"{condition} {role} did not record expected waits")
+            elif not should_wait and waited:
+                errors.append(f"{condition} {role} recorded unexpected waits")
     return tuple(errors)
 
 

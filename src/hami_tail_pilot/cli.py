@@ -215,7 +215,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             if not result.passed:
                 print("smoke failed: " + "; ".join(result.errors), file=sys.stderr)
                 return 1
-            print("smoke passed: P0 wait=0 and P1/P3 wait>0")
+            print("smoke passed: each victim and neighbor wait path matched the design")
         elif args.command == "run":
             config = load_config(args.config)
             if args.dry_run:
