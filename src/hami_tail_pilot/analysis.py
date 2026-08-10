@@ -27,9 +27,11 @@ class RunMetrics:
 @dataclass(frozen=True)
 class ContrastResult:
     name: str
+    kind: str
     ratios: tuple[float, ...]
     median_ratio: float
     same_direction_blocks: int
+    direction: str
 
 
 @dataclass(frozen=True)
@@ -39,8 +41,17 @@ class PilotDecision:
     contrasts: tuple[ContrastResult, ...]
 
 
-_CONDITIONS = ("P0", "P1", "P2", "P3")
-_CONTRASTS = (("P1/P0", "P1", "P0"), ("P3/P1", "P3", "P1"), ("P3/P2", "P3", "P2"))
+_CONDITIONS = ("C0", "C1", "C2", "C3", "C4", "C5")
+_PRIMARY_CONTRASTS = (
+    ("C2/C1", "C2", "C1"),
+    ("C4/C3", "C4", "C3"),
+    ("C5/C4", "C5", "C4"),
+)
+_DESCRIPTIVE_CONTRASTS = (
+    ("C1/C0", "C1", "C0"),
+    ("C3/C1", "C3", "C1"),
+    ("C5/C3", "C5", "C3"),
+)
 
 
 def _validate_numeric_inputs(runs: Sequence[RunMetrics], probe_overhead_ratio: float) -> None:
@@ -63,16 +74,32 @@ def _index_complete_runs(runs: Sequence[RunMetrics]) -> dict[tuple[int, str], Ru
     return indexed if set(indexed) == expected else None
 
 
-def _contrast(indexed: dict[tuple[int, str], RunMetrics], name: str, numerator: str, denominator: str) -> ContrastResult:
+def _contrast(
+    indexed: dict[tuple[int, str], RunMetrics],
+    kind: str,
+    name: str,
+    numerator: str,
+    denominator: str,
+) -> ContrastResult:
     ratios = tuple(
         indexed[(block, numerator)].p99_ms / indexed[(block, denominator)].p99_ms
         for block in range(1, 6)
     )
+    increases = sum(ratio > 1.0 for ratio in ratios)
+    decreases = sum(ratio < 1.0 for ratio in ratios)
+    if increases > decreases:
+        direction = "increase"
+    elif decreases > increases:
+        direction = "decrease"
+    else:
+        direction = "mixed"
     return ContrastResult(
         name=name,
+        kind=kind,
         ratios=ratios,
         median_ratio=statistics.median(ratios),
-        same_direction_blocks=sum(ratio > 1.0 for ratio in ratios),
+        same_direction_blocks=max(increases, decreases),
+        direction=direction,
     )
 
 
@@ -82,58 +109,72 @@ def evaluate_go(runs: Sequence[RunMetrics], probe_overhead_ratio: float) -> Pilo
     if indexed is None:
         return PilotDecision(
             decision="NO_GO",
-            reasons=("each block must contain P0, P1, P2, P3 exactly once",),
+            reasons=(
+                "each block must contain C0, C1, C2, C3, C4, C5 exactly once",
+            ),
             contrasts=(),
         )
 
-    contrasts = tuple(_contrast(indexed, *definition) for definition in _CONTRASTS)
+    contrasts = tuple(
+        _contrast(indexed, "primary", *definition)
+        for definition in _PRIMARY_CONTRASTS
+    ) + tuple(
+        _contrast(indexed, "descriptive", *definition)
+        for definition in _DESCRIPTIVE_CONTRASTS
+    )
     invalid_reasons: list[str] = []
     if probe_overhead_ratio > 1.05:
         invalid_reasons.append("probe overhead exceeds 5%")
     if any(
         indexed[(block, condition)].probe.waited_calls == 0
         for block in range(1, 6)
-        for condition in ("P1", "P3")
+        for condition in ("C2", "C4", "C5")
     ):
-        invalid_reasons.append("quota conditions did not record waits")
+        invalid_reasons.append("limited victim conditions did not record waits")
     if any(
         indexed[(block, condition)].probe.waited_calls > 0
         for block in range(1, 6)
-        for condition in ("P0", "P2")
+        for condition in ("C0", "C1", "C3")
     ):
-        invalid_reasons.append("no-quota conditions recorded waits")
+        invalid_reasons.append("unlimited victim conditions recorded waits")
     if invalid_reasons:
         return PilotDecision("NO_GO", tuple(invalid_reasons), contrasts)
 
+    primary = [contrast for contrast in contrasts if contrast.kind == "primary"]
     go_contrasts = [
         contrast
-        for contrast in contrasts
-        if contrast.same_direction_blocks >= 4 and contrast.median_ratio >= 1.10
+        for contrast in primary
+        if contrast.same_direction_blocks >= 4
+        and (
+            contrast.median_ratio >= 1.10
+            or contrast.median_ratio <= 1 / 1.10
+        )
     ]
     if go_contrasts:
         names = ", ".join(contrast.name for contrast in go_contrasts)
         return PilotDecision(
             "GO",
-            (f"{names} met the 4-of-5 direction rule and median p99 slowdown >=10%",),
+            (f"{names} met the 4-of-5 direction rule and median p99 change >=10%",),
             contrasts,
         )
 
     stable_small = [
         contrast
-        for contrast in contrasts
-        if contrast.same_direction_blocks >= 4 and contrast.median_ratio > 1.0
+        for contrast in primary
+        if contrast.same_direction_blocks >= 4
+        and not math.isclose(contrast.median_ratio, 1.0)
     ]
     if stable_small:
         names = ", ".join(contrast.name for contrast in stable_small)
         return PilotDecision(
             "PARTIAL_GO",
-            (f"{names} was directionally stable but median p99 slowdown was below 10%",),
+            (f"{names} was directionally stable but median p99 change was below 10%",),
             contrasts,
         )
 
     return PilotDecision(
         "NO_GO",
-        ("no contrast showed a stable p99 increase in at least 4 of 5 blocks",),
+        ("no primary contrast showed a stable p99 change in at least 4 of 5 blocks",),
         contrasts,
     )
 
@@ -146,13 +187,23 @@ def write_decision_reports(decision: PilotDecision, output_dir: Path) -> tuple[P
     payload = asdict(decision)
     json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-    lines = [f"# Pilot decision: {decision.decision}", "", "## Reasons", ""]
+    lines = [f"# 파일럿 판정: {decision.decision}", "", "## 판정 이유", ""]
     lines.extend(f"- {reason}" for reason in decision.reasons)
-    lines.extend(["", "## Paired p99 ratios", "", "| Contrast | Ratios by block | Median | Increasing blocks |", "|---|---|---:|---:|"])
+    lines.extend(
+        [
+            "",
+            "## 묶음별 느린 요청 응답시간 비율",
+            "",
+            "| 비교 | 용도 | 묶음별 비율 | 비율의 가운데 값 | 같은 방향 묶음 | 방향 |",
+            "|---|---|---|---:|---:|---|",
+        ]
+    )
     for contrast in decision.contrasts:
         ratios = ", ".join(f"{ratio:.3f}" for ratio in contrast.ratios)
         lines.append(
-            f"| {contrast.name} | {ratios} | {contrast.median_ratio:.3f} | {contrast.same_direction_blocks}/5 |"
+            f"| {contrast.name} | {contrast.kind} | {ratios} | "
+            f"{contrast.median_ratio:.3f} | {contrast.same_direction_blocks}/5 | "
+            f"{contrast.direction} |"
         )
     lines.extend(
         [

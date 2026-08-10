@@ -7,7 +7,7 @@ from hami_tail_pilot.cli import main
 from hami_tail_pilot.preflight import EXPECTED_SOURCE_MANIFEST
 
 
-def test_dry_run_creates_twenty_synthetic_runs_and_go_report(tmp_path):
+def test_dry_run_creates_thirty_synthetic_runs_and_go_report(tmp_path):
     experiment = tmp_path / "fake-pilot"
 
     assert (
@@ -40,8 +40,15 @@ def test_dry_run_creates_twenty_synthetic_runs_and_go_report(tmp_path):
         newline="", encoding="utf-8"
     ) as source:
         rows = list(csv.DictReader(source))
-    assert len(rows) == 20
-    assert {row["condition"] for row in rows} == {"P0", "P1", "P2", "P3"}
+    assert len(rows) == 30
+    assert {row["condition"] for row in rows} == {
+        "C0",
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+    }
     assert all(row["synthetic"] == "true" for row in rows)
     decision = json.loads(
         (experiment / "pilot_decision.json").read_text(encoding="utf-8")
@@ -94,10 +101,10 @@ def test_dry_run_is_resumable_and_does_not_overwrite_complete_runs(tmp_path):
     assert main(command) == 0
 
     assert first_manifest.read_text(encoding="utf-8") == before
-    assert len(list(experiment.glob("*/manifest.json"))) == 20
+    assert len(list(experiment.glob("*/manifest.json"))) == 30
 
 
-def test_analyze_rejects_an_incomplete_twenty_run_set(tmp_path, capsys):
+def test_analyze_rejects_an_incomplete_thirty_run_set(tmp_path, capsys):
     experiment = tmp_path / "fake-pilot"
     assert (
         main(
@@ -119,7 +126,7 @@ def test_analyze_rejects_an_incomplete_twenty_run_set(tmp_path, capsys):
         main(["analyze", "--input", str(experiment), "--probe-overhead-ratio", "1.0"])
         == 1
     )
-    assert "expected 20 complete runs" in capsys.readouterr().err
+    assert "expected 30 complete runs" in capsys.readouterr().err
 
 
 def test_real_run_preflight_only_records_a_validated_environment(tmp_path, monkeypatch):

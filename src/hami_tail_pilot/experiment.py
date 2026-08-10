@@ -7,7 +7,7 @@ from pathlib import Path
 from hami_tail_pilot.analysis import PilotDecision, RunMetrics, evaluate_go, write_decision_reports
 from hami_tail_pilot.config import PilotConfig
 from hami_tail_pilot.mlperf import parse_mlperf_summary
-from hami_tail_pilot.probe import parse_probe_jsonl
+from hami_tail_pilot.probe import ProbeMetrics, parse_probe_jsonl
 from hami_tail_pilot.schedule import RunSpec, build_schedule, write_schedule_json
 
 
@@ -16,10 +16,12 @@ class ExperimentError(ValueError):
 
 
 _SYNTHETIC_P99_MS = {
-    "P0": (100.0, 100.0, 100.0, 100.0, 100.0),
-    "P1": (120.0, 115.0, 112.0, 111.0, 95.0),
-    "P2": (130.0, 130.0, 130.0, 130.0, 130.0),
-    "P3": (150.0, 150.0, 150.0, 150.0, 150.0),
+    "C0": (98.0, 98.0, 98.0, 98.0, 98.0),
+    "C1": (100.0, 100.0, 100.0, 100.0, 100.0),
+    "C2": (120.0, 115.0, 112.0, 111.0, 95.0),
+    "C3": (105.0, 105.0, 105.0, 105.0, 105.0),
+    "C4": (126.0, 121.0, 118.0, 117.0, 100.0),
+    "C5": (126.0, 121.0, 118.0, 117.0, 100.0),
 }
 
 
@@ -57,7 +59,7 @@ def _write_synthetic_run(spec: RunSpec, output: Path) -> None:
     (victim_dir / "mlperf_log_summary.txt").write_text(
         _synthetic_summary(p99_ms), encoding="utf-8"
     )
-    waited = spec.condition.name in {"P1", "P3"}
+    waited = spec.condition.name in {"C2", "C4", "C5"}
     probe = {
         "schema_version": 1,
         "pid": 1000 + spec.block,
@@ -66,9 +68,10 @@ def _write_synthetic_run(spec: RunSpec, output: Path) -> None:
         "sleep_calls": 80 if waited else 0,
         "wait_ns": 800_000_000 if waited else 0,
     }
-    (victim_dir / "hami_probe.jsonl").write_text(
-        json.dumps(probe, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    if spec.condition.hami_enabled:
+        (victim_dir / "hami_probe.jsonl").write_text(
+            json.dumps(probe, sort_keys=True) + "\n", encoding="utf-8"
+        )
     _write_json(
         run_dir / "manifest.json",
         {
@@ -110,7 +113,10 @@ def load_experiment_runs(input_dir: Path) -> tuple[list[RunMetrics], list[dict[s
         if status.get("status") != "complete":
             continue
         mlperf = parse_mlperf_summary(run_dir / "victim" / "mlperf_log_summary.txt")
-        probe = parse_probe_jsonl(run_dir / "victim" / "hami_probe.jsonl")
+        if manifest["condition"] == "C0":
+            probe = ProbeMetrics(0, 0, 0, 0)
+        else:
+            probe = parse_probe_jsonl(run_dir / "victim" / "hami_probe.jsonl")
         run = RunMetrics(
             block=int(manifest["block"]),
             condition=str(manifest["condition"]),
@@ -135,8 +141,8 @@ def load_experiment_runs(input_dir: Path) -> tuple[list[RunMetrics], list[dict[s
                 "synthetic": str(bool(manifest.get("synthetic", False))).lower(),
             }
         )
-    if len(metrics) != 20:
-        raise ExperimentError(f"expected 20 complete runs, found {len(metrics)}")
+    if len(metrics) != 30:
+        raise ExperimentError(f"expected 30 complete runs, found {len(metrics)}")
     return metrics, csv_rows
 
 
