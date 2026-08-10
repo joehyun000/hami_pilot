@@ -107,13 +107,21 @@ def test_evaluate_go_returns_partial_go_for_stable_but_small_effect():
 @pytest.mark.parametrize(
     ("overhead", "mutate", "reason"),
     [
-        (1.051, None, "probe overhead exceeds 5%"),
-        (1.0, "missing_wait", "limited victim conditions did not record waits"),
-        (1.0, "unexpected_wait", "unlimited victim conditions recorded waits"),
+        (1.051, None, "측정 장치 자체의 응답시간 변화가 5%를 초과함"),
+        (
+            1.0,
+            "missing_wait",
+            "사용 한도가 있는 측정 대상에서 실행 대기가 기록되지 않음",
+        ),
+        (
+            1.0,
+            "unexpected_wait",
+            "사용 한도가 없는 측정 대상에서 예상하지 않은 실행 대기가 기록됨",
+        ),
         (
             1.0,
             "missing_run",
-            "each block must contain C0, C1, C2, C3, C4, C5 exactly once",
+            "각 묶음에는 C0, C1, C2, C3, C4, C5가 한 번씩 있어야 함",
         ),
     ],
 )

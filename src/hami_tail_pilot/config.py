@@ -76,7 +76,7 @@ def _parse_condition(raw: Any) -> Condition:
 
     name = raw["name"]
     if name not in _FIXED_CONDITIONS:
-        raise ConfigError("conditions must be exactly P0, P1, P2, P3")
+        raise ConfigError("conditions must be exactly C0, C1, C2, C3, C4, C5")
     expected = _FIXED_CONDITIONS[name]
     actual = (
         raw["hami_enabled"],

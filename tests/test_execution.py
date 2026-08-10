@@ -37,16 +37,16 @@ class FakeRunOne:
         return RunResult(run_dir, status, error)
 
 
-def test_execute_schedule_runs_all_twenty_conditions_and_marks_experiment_complete(tmp_path):
+def test_execute_schedule_runs_all_thirty_conditions_and_marks_experiment_complete(tmp_path):
     runner = FakeRunOne()
 
     summary = execute_schedule(
         resolved_config(), tmp_path / "experiment", dummy_assets(tmp_path), run_one=runner
     )
 
-    assert summary.completed == 20
+    assert summary.completed == 30
     assert summary.failed == 0
-    assert len(runner.calls) == 20
+    assert len(runner.calls) == 30
     assert json.loads((tmp_path / "experiment" / "status.json").read_text())["status"] == "complete"
 
 
@@ -58,13 +58,13 @@ def test_execute_schedule_skips_complete_runs_on_resume(tmp_path):
 
     summary = execute_schedule(resolved_config(), output, dummy_assets(tmp_path), run_one=second)
 
-    assert summary.skipped == 20
+    assert summary.skipped == 30
     assert second.calls == []
 
 
 def test_execute_schedule_archives_failed_run_only_when_rerun_is_explicit(tmp_path):
     output = tmp_path / "experiment"
-    first = FakeRunOne(fail_condition="P2")
+    first = FakeRunOne(fail_condition="C2")
     initial = execute_schedule(resolved_config(), output, dummy_assets(tmp_path), run_one=first)
     blocked = FakeRunOne()
 

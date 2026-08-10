@@ -12,12 +12,12 @@ def _assets(tmp_path):
     return RuntimeAssets("probe:image", value, value, value)
 
 
-def _write_summary(path):
+def _write_summary(path, achieved_qps=2.8):
     path.write_text(
         "\n".join(
             (
                 "Result is : VALID",
-                "Completed samples per second : 2.8",
+                f"Completed samples per second : {achieved_qps}",
                 "50.00 percentile latency (ns) : 10000000",
                 "99.00 percentile latency (ns) : 100000000",
                 "Completed samples : 1000",
@@ -112,3 +112,37 @@ def test_execute_smoke_blocks_when_limited_roles_record_no_wait(tmp_path):
     assert "C4 victim did not record expected waits" in result.errors
     assert "C5 victim did not record expected waits" in result.errors
     assert "C5 neighbor did not record expected waits" in result.errors
+
+
+def test_execute_smoke_blocks_when_fixed_request_rate_is_not_processed(tmp_path):
+    config = load_config(Path("configs/pilot.yaml"))
+    config = config.__class__(**{**config.__dict__, "victim_target_qps": 2.8})
+
+    def fake_run(spec, run_config, root, *, assets):
+        run_dir = root / spec.run_id
+        victim = run_dir / "victim"
+        victim.mkdir(parents=True)
+        _write_summary(victim / "mlperf_log_summary.txt", achieved_qps=2.0)
+        roles = ("victim", "neighbor") if spec.condition.neighbor_enabled else ("victim",)
+        for role in roles:
+            role_dir = run_dir / role
+            role_dir.mkdir(parents=True, exist_ok=True)
+            waited = 1 if role == "victim" and spec.condition.victim_sm_limit == 50 else 0
+            if role == "neighbor" and spec.condition.neighbor_sm_limit == 50:
+                waited = 1
+            (role_dir / "hami_probe.jsonl").write_text(
+                '{"schema_version":1,"pid":10,"limiter_calls":10,'
+                f'"waited_calls":{waited},"sleep_calls":{waited},"wait_ns":{waited}}}\n',
+                encoding="utf-8",
+            )
+        return RunResult(run_dir, "complete", None)
+
+    result = execute_smoke(
+        config,
+        tmp_path / "experiment",
+        _assets(tmp_path),
+        run_one=fake_run,
+    )
+
+    assert result.passed is False
+    assert "C1이 고정 요청량의 98% 미만을 처리함" in result.errors

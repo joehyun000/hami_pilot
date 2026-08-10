@@ -67,6 +67,8 @@ def execute_smoke(
             errors.append(f"{name} smoke output is invalid: {exc}")
             continue
         probes[name] = role_probes
+        if metrics.completed_samples_per_second < config.victim_target_qps * 0.98:
+            errors.append(f"{name}이 고정 요청량의 98% 미만을 처리함")
         report_conditions[name] = {
             "p99_ms": metrics.p99_ms,
             "completed_samples_per_second": metrics.completed_samples_per_second,

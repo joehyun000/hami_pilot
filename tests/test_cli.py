@@ -124,7 +124,7 @@ def test_calibrate_command_blocks_the_pilot_when_probe_overhead_exceeds_five_per
         )
         == 1
     )
-    assert "probe overhead exceeds 5%" in capsys.readouterr().err
+    assert "측정 장치 자체의 응답시간 변화가 5%를 초과" in capsys.readouterr().err
 
 
 def test_calibrate_command_can_run_server_measurements_automatically(

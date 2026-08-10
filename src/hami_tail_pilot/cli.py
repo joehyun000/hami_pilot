@@ -174,11 +174,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 target_qps = result.target_qps
                 overhead = result.probe_overhead_ratio
             print(
-                f"calibration target_qps={target_qps:g}, "
-                f"probe_overhead_ratio={overhead:.6f}"
+                f"선택한 초당 요청 수={target_qps:g}, "
+                f"측정 장치 응답시간 비율={overhead:.6f}"
             )
             if overhead > 1.05:
-                print("probe overhead exceeds 5%; pilot is blocked", file=sys.stderr)
+                print(
+                    "측정 장치 자체의 응답시간 변화가 5%를 초과하여 "
+                    "본 실험을 중단합니다",
+                    file=sys.stderr,
+                )
                 return 1
         elif args.command == "smoke":
             config = load_config(args.config)
@@ -215,7 +219,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             if not result.passed:
                 print("smoke failed: " + "; ".join(result.errors), file=sys.stderr)
                 return 1
-            print("smoke passed: each victim and neighbor wait path matched the design")
+            print("짧은 조건 확인 통과: 측정 대상과 이웃 작업의 실행 대기가 설계와 일치함")
         elif args.command == "run":
             config = load_config(args.config)
             if args.dry_run:

@@ -110,7 +110,7 @@ def evaluate_go(runs: Sequence[RunMetrics], probe_overhead_ratio: float) -> Pilo
         return PilotDecision(
             decision="NO_GO",
             reasons=(
-                "each block must contain C0, C1, C2, C3, C4, C5 exactly once",
+                "각 묶음에는 C0, C1, C2, C3, C4, C5가 한 번씩 있어야 함",
             ),
             contrasts=(),
         )
@@ -124,19 +124,19 @@ def evaluate_go(runs: Sequence[RunMetrics], probe_overhead_ratio: float) -> Pilo
     )
     invalid_reasons: list[str] = []
     if probe_overhead_ratio > 1.05:
-        invalid_reasons.append("probe overhead exceeds 5%")
+        invalid_reasons.append("측정 장치 자체의 응답시간 변화가 5%를 초과함")
     if any(
         indexed[(block, condition)].probe.waited_calls == 0
         for block in range(1, 6)
         for condition in ("C2", "C4", "C5")
     ):
-        invalid_reasons.append("limited victim conditions did not record waits")
+        invalid_reasons.append("사용 한도가 있는 측정 대상에서 실행 대기가 기록되지 않음")
     if any(
         indexed[(block, condition)].probe.waited_calls > 0
         for block in range(1, 6)
         for condition in ("C0", "C1", "C3")
     ):
-        invalid_reasons.append("unlimited victim conditions recorded waits")
+        invalid_reasons.append("사용 한도가 없는 측정 대상에서 예상하지 않은 실행 대기가 기록됨")
     if invalid_reasons:
         return PilotDecision("NO_GO", tuple(invalid_reasons), contrasts)
 
@@ -154,7 +154,10 @@ def evaluate_go(runs: Sequence[RunMetrics], probe_overhead_ratio: float) -> Pilo
         names = ", ".join(contrast.name for contrast in go_contrasts)
         return PilotDecision(
             "GO",
-            (f"{names} met the 4-of-5 direction rule and median p99 change >=10%",),
+            (
+                f"{names}: 5개 묶음 중 4개 이상 같은 방향이며, "
+                "느린 요청 응답시간의 가운데 변화가 10% 이상임",
+            ),
             contrasts,
         )
 
@@ -168,13 +171,16 @@ def evaluate_go(runs: Sequence[RunMetrics], probe_overhead_ratio: float) -> Pilo
         names = ", ".join(contrast.name for contrast in stable_small)
         return PilotDecision(
             "PARTIAL_GO",
-            (f"{names} was directionally stable but median p99 change was below 10%",),
+            (
+                f"{names}: 5개 묶음 중 4개 이상 같은 방향이지만, "
+                "느린 요청 응답시간의 가운데 변화가 10% 미만임",
+            ),
             contrasts,
         )
 
     return PilotDecision(
         "NO_GO",
-        ("no primary contrast showed a stable p99 change in at least 4 of 5 blocks",),
+        ("판정용 비교에서 5개 묶음 중 4개 이상 반복되는 변화가 없음",),
         contrasts,
     )
 
@@ -200,10 +206,16 @@ def write_decision_reports(decision: PilotDecision, output_dir: Path) -> tuple[P
     )
     for contrast in decision.contrasts:
         ratios = ", ".join(f"{ratio:.3f}" for ratio in contrast.ratios)
+        kind = {"primary": "판정용", "descriptive": "설명용"}[contrast.kind]
+        direction = {
+            "increase": "증가",
+            "decrease": "감소",
+            "mixed": "혼합",
+        }[contrast.direction]
         lines.append(
-            f"| {contrast.name} | {contrast.kind} | {ratios} | "
+            f"| {contrast.name} | {kind} | {ratios} | "
             f"{contrast.median_ratio:.3f} | {contrast.same_direction_blocks}/5 | "
-            f"{contrast.direction} |"
+            f"{direction} |"
         )
     lines.extend(
         [
