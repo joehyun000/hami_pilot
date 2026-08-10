@@ -5,7 +5,7 @@ import json
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 import statistics
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 
 import yaml
 
@@ -56,6 +56,24 @@ def choose_target_qps(
     return round(max(sustainable) * load_fraction, 3)
 
 
+def choose_common_target_qps(
+    candidates_by_condition: Mapping[str, Sequence[tuple[float, MLPerfMetrics]]],
+    load_fraction: float = 0.70,
+) -> float:
+    required = {"C2", "C4", "C5"}
+    if set(candidates_by_condition) != required:
+        raise CalibrationError(
+            "calibration candidates must contain exactly C2, C4, and C5"
+        )
+    sustainable_limits = [
+        choose_target_qps(candidates_by_condition[name], load_fraction=1.0)
+        for name in ("C2", "C4", "C5")
+    ]
+    if not math.isfinite(load_fraction) or not 0 < load_fraction <= 1:
+        raise CalibrationError("load_fraction must be in (0, 1]")
+    return round(min(sustainable_limits) * load_fraction, 3)
+
+
 def probe_overhead_ratio(
     probe_off_p99: Sequence[float],
     probe_on_p99: Sequence[float],
@@ -76,17 +94,31 @@ def resolve_calibration_measurements(path: Path) -> tuple[float, float]:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise CalibrationError(f"cannot read calibration measurements: {exc}") from exc
-    required = {"candidates", "probe_off_p99_ms", "probe_on_p99_ms"}
+    required = {
+        "candidates_by_condition",
+        "probe_off_p99_ms",
+        "probe_on_p99_ms",
+    }
     if not isinstance(payload, dict) or set(payload) != required:
         raise CalibrationError("calibration measurements have unexpected schema")
-    candidates = []
-    for item in payload["candidates"]:
-        if not isinstance(item, dict) or set(item) != {"target_qps", "summary"}:
-            raise CalibrationError("calibration candidate has unexpected schema")
-        candidates.append(
-            (float(item["target_qps"]), parse_mlperf_summary(Path(item["summary"])))
-        )
-    target_qps = choose_target_qps(candidates)
+    raw_candidates = payload["candidates_by_condition"]
+    if not isinstance(raw_candidates, dict):
+        raise CalibrationError("calibration candidates must be grouped by condition")
+    candidates_by_condition: dict[str, list[tuple[float, MLPerfMetrics]]] = {}
+    for condition, items in raw_candidates.items():
+        if not isinstance(items, list):
+            raise CalibrationError("calibration candidate group must be a list")
+        candidates_by_condition[condition] = []
+        for item in items:
+            if not isinstance(item, dict) or set(item) != {"target_qps", "summary"}:
+                raise CalibrationError("calibration candidate has unexpected schema")
+            candidates_by_condition[condition].append(
+                (
+                    float(item["target_qps"]),
+                    parse_mlperf_summary(Path(item["summary"])),
+                )
+            )
+    target_qps = choose_common_target_qps(candidates_by_condition)
     overhead = probe_overhead_ratio(
         payload["probe_off_p99_ms"], payload["probe_on_p99_ms"]
     )
@@ -192,37 +224,46 @@ def execute_calibration(
     if len(set(normalized_qps)) != len(normalized_qps):
         raise CalibrationError("candidate_qps values must be unique")
 
-    p0 = config.conditions[0]
+    conditions = {condition.name: condition for condition in config.conditions}
     candidate_root = output_dir / "calibration" / "candidates"
-    candidates: list[tuple[float, MLPerfMetrics]] = []
-    candidate_records: list[dict[str, object]] = []
-    for order, qps in enumerate(normalized_qps, start=1):
-        run_config = replace(config, victim_target_qps=float(qps))
-        spec = RunSpec(0, order, p0, f"qps-{_qps_token(float(qps))}")
-        metrics = _run_calibration_case(
-            spec,
-            run_config,
-            candidate_root,
-            probe_assets,
-            run_one,
-            require_valid=False,
-        )
-        candidates.append((float(qps), metrics))
-        candidate_records.append(
-            {
-                "target_qps": float(qps),
-                "summary": str(
-                    (
-                        candidate_root
-                        / spec.run_id
-                        / "victim"
-                        / "mlperf_log_summary.txt"
-                    ).resolve()
-                ),
-            }
-        )
+    candidates_by_condition: dict[str, list[tuple[float, MLPerfMetrics]]] = {}
+    candidate_records: dict[str, list[dict[str, object]]] = {}
+    for condition_name in ("C2", "C4", "C5"):
+        candidates_by_condition[condition_name] = []
+        candidate_records[condition_name] = []
+        condition_root = candidate_root / condition_name
+        for order, qps in enumerate(normalized_qps, start=1):
+            run_config = replace(config, victim_target_qps=float(qps))
+            spec = RunSpec(
+                0,
+                order,
+                conditions[condition_name],
+                f"qps-{_qps_token(float(qps))}",
+            )
+            metrics = _run_calibration_case(
+                spec,
+                run_config,
+                condition_root,
+                probe_assets,
+                run_one,
+                require_valid=False,
+            )
+            candidates_by_condition[condition_name].append((float(qps), metrics))
+            candidate_records[condition_name].append(
+                {
+                    "target_qps": float(qps),
+                    "summary": str(
+                        (
+                            condition_root
+                            / spec.run_id
+                            / "victim"
+                            / "mlperf_log_summary.txt"
+                        ).resolve()
+                    ),
+                }
+            )
 
-    target_qps = choose_target_qps(candidates)
+    target_qps = choose_common_target_qps(candidates_by_condition)
     overhead_root = output_dir / "calibration" / "probe-overhead"
     paired_order = (
         ("vanilla", vanilla_assets, "probe", probe_assets),
@@ -238,7 +279,7 @@ def execute_calibration(
             spec = RunSpec(
                 pair_index,
                 position // 2 + 1,
-                p0,
+                conditions["C1"],
                 f"pair-{pair_index:02d}-{label}",
             )
             metrics = _run_calibration_case(
@@ -251,7 +292,7 @@ def execute_calibration(
     (output_dir / "calibration_measurements.json").write_text(
         json.dumps(
             {
-                "candidates": candidate_records,
+                "candidates_by_condition": candidate_records,
                 "probe_off_p99_ms": p99["vanilla"],
                 "probe_on_p99_ms": p99["probe"],
             },

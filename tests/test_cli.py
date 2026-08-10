@@ -50,9 +50,13 @@ def test_calibrate_command_writes_resolved_qps_and_probe_overhead(tmp_path):
     measurements.write_text(
         json.dumps(
             {
-                "candidates": [
-                    {"target_qps": qps, "summary": str(summary)} for qps in (1, 2, 4, 8)
-                ],
+                "candidates_by_condition": {
+                    condition: [
+                        {"target_qps": qps, "summary": str(summary)}
+                        for qps in (1, 2, 4, 8)
+                    ]
+                    for condition in ("C2", "C4", "C5")
+                },
                 "probe_off_p99_ms": [100, 200, 400],
                 "probe_on_p99_ms": [104, 204, 416],
             }
@@ -95,7 +99,10 @@ def test_calibrate_command_blocks_the_pilot_when_probe_overhead_exceeds_five_per
     measurements.write_text(
         json.dumps(
             {
-                "candidates": [{"target_qps": 8, "summary": str(summary)}],
+                "candidates_by_condition": {
+                    condition: [{"target_qps": 8, "summary": str(summary)}]
+                    for condition in ("C2", "C4", "C5")
+                },
                 "probe_off_p99_ms": [100, 100, 100],
                 "probe_on_p99_ms": [106, 107, 108],
             }

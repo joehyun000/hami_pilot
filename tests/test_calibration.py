@@ -6,6 +6,7 @@ import pytest
 
 from hami_tail_pilot.calibration import (
     CalibrationError,
+    choose_common_target_qps,
     choose_target_qps,
     execute_calibration,
     probe_overhead_ratio,
@@ -42,6 +43,21 @@ def test_choose_target_qps_is_independent_of_candidate_order():
     assert choose_target_qps(candidates) == 2.8
 
 
+def test_choose_common_target_qps_uses_slowest_limited_condition():
+    candidates_by_condition = {
+        "C2": [(2.0, metrics(2.0)), (4.0, metrics(4.0)), (8.0, metrics(8.0))],
+        "C4": [(2.0, metrics(2.0)), (4.0, metrics(4.0)), (8.0, metrics(7.0))],
+        "C5": [(2.0, metrics(2.0)), (4.0, metrics(3.0)), (8.0, metrics(6.0))],
+    }
+
+    assert choose_common_target_qps(candidates_by_condition) == 1.4
+
+
+def test_choose_common_target_qps_requires_all_three_limited_conditions():
+    with pytest.raises(CalibrationError, match="C2, C4, and C5"):
+        choose_common_target_qps({"C2": [(1.0, metrics(1.0))]})
+
+
 @pytest.mark.parametrize(
     "candidates",
     [
@@ -72,7 +88,7 @@ def test_probe_overhead_ratio_rejects_unpaired_or_nonpositive_values(off, on):
         probe_overhead_ratio(off, on)
 
 
-def test_execute_calibration_runs_qps_sweep_and_three_paired_images(tmp_path):
+def test_execute_calibration_sweeps_three_limited_conditions_and_probe_pairs(tmp_path):
     config = load_config(Path("configs/pilot.yaml"))
     input_file = tmp_path / "input"
     input_file.write_text("fixture", encoding="utf-8")
@@ -81,12 +97,20 @@ def test_execute_calibration_runs_qps_sweep_and_three_paired_images(tmp_path):
     calls = []
 
     def fake_run(spec, run_config, root, *, assets):
-        calls.append((spec.run_id, run_config.victim_target_qps, assets.image_tag))
+        calls.append(
+            (
+                spec.run_id,
+                spec.condition.name,
+                run_config.victim_target_qps,
+                assets.image_tag,
+            )
+        )
         run_dir = root / spec.run_id
         victim = run_dir / "victim"
         victim.mkdir(parents=True)
         target = run_config.victim_target_qps
-        achieved = target if target <= 4 else target * 0.90
+        sustainable_max = {"C2": 8, "C4": 4, "C5": 2, "C1": float("inf")}
+        achieved = target if target <= sustainable_max[spec.condition.name] else target * 0.90
         overhead = 1.04 if assets.image_tag == "probe:image" else 1.0
         (victim / "mlperf_log_summary.txt").write_text(
             "\n".join(
@@ -112,11 +136,13 @@ def test_execute_calibration_runs_qps_sweep_and_three_paired_images(tmp_path):
         run_one=fake_run,
     )
 
-    assert result.target_qps == 2.8
+    assert result.target_qps == 1.4
     assert result.probe_overhead_ratio == pytest.approx(1.04)
     assert result.probe_overhead_pass is True
-    assert len(calls) == 10
-    assert [image for _, _, image in calls[-6:]] == [
+    assert len(calls) == 18
+    assert {condition for _, condition, _, _ in calls[:12]} == {"C2", "C4", "C5"}
+    assert {condition for _, condition, _, _ in calls[-6:]} == {"C1"}
+    assert [image for _, _, _, image in calls[-6:]] == [
         "vanilla:image",
         "probe:image",
         "probe:image",
@@ -129,7 +155,7 @@ def test_execute_calibration_runs_qps_sweep_and_three_paired_images(tmp_path):
             encoding="utf-8"
         )
     )
-    assert decision["target_qps"] == 2.8
+    assert decision["target_qps"] == 1.4
     assert (tmp_path / "experiment" / "pilot.resolved.yaml").is_file()
 
 
