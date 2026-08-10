@@ -15,7 +15,7 @@ def test_cli_without_command_prints_help(capsys):
     assert "validate" in capsys.readouterr().out
 
 
-def test_schedule_command_writes_the_approved_twenty_run_schedule(tmp_path):
+def test_schedule_command_writes_the_approved_thirty_run_schedule(tmp_path):
     output = tmp_path / "schedule.json"
 
     assert (
@@ -23,7 +23,7 @@ def test_schedule_command_writes_the_approved_twenty_run_schedule(tmp_path):
         == 0
     )
     assert output.is_file()
-    assert output.read_text(encoding="utf-8").count('"run_id"') == 20
+    assert output.read_text(encoding="utf-8").count('"run_id"') == 30
 
 
 def test_python_module_entrypoint_executes_the_requested_command():

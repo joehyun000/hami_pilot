@@ -14,7 +14,8 @@ class ConfigError(ValueError):
 @dataclass(frozen=True)
 class Condition:
     name: str
-    victim_sm_limit: int
+    hami_enabled: bool
+    victim_sm_limit: int | None
     neighbor_enabled: bool
     neighbor_sm_limit: int | None
 
@@ -41,15 +42,18 @@ _PILOT_KEYS = {
 }
 _CONDITION_KEYS = {
     "name",
+    "hami_enabled",
     "victim_sm_limit",
     "neighbor_enabled",
     "neighbor_sm_limit",
 }
 _FIXED_CONDITIONS = {
-    "P0": (100, False, None),
-    "P1": (50, False, None),
-    "P2": (100, True, 100),
-    "P3": (50, True, 50),
+    "C0": (False, None, False, None),
+    "C1": (True, 100, False, None),
+    "C2": (True, 50, False, None),
+    "C3": (True, 100, True, 100),
+    "C4": (True, 50, True, 100),
+    "C5": (True, 50, True, 50),
 }
 
 
@@ -75,6 +79,7 @@ def _parse_condition(raw: Any) -> Condition:
         raise ConfigError("conditions must be exactly P0, P1, P2, P3")
     expected = _FIXED_CONDITIONS[name]
     actual = (
+        raw["hami_enabled"],
         raw["victim_sm_limit"],
         raw["neighbor_enabled"],
         raw["neighbor_sm_limit"],
@@ -117,8 +122,11 @@ def load_config(path: Path) -> PilotConfig:
     if not isinstance(raw_conditions, list):
         raise ConfigError("conditions must be a list")
     conditions = tuple(_parse_condition(item) for item in raw_conditions)
-    if [condition.name for condition in conditions] != ["P0", "P1", "P2", "P3"]:
-        raise ConfigError("conditions must be exactly P0, P1, P2, P3 in order")
+    expected_names = ["C0", "C1", "C2", "C3", "C4", "C5"]
+    if [condition.name for condition in conditions] != expected_names:
+        raise ConfigError(
+            "conditions must be exactly C0, C1, C2, C3, C4, C5 in order"
+        )
 
     return PilotConfig(
         seed=seed,
@@ -129,4 +137,3 @@ def load_config(path: Path) -> PilotConfig:
         victim_target_qps=target_qps,
         conditions=conditions,
     )
-

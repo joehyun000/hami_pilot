@@ -16,25 +16,43 @@ def valid_payload() -> dict:
         "victim_target_qps": None,
         "conditions": [
             {
-                "name": "P0",
+                "name": "C0",
+                "hami_enabled": False,
+                "victim_sm_limit": None,
+                "neighbor_enabled": False,
+                "neighbor_sm_limit": None,
+            },
+            {
+                "name": "C1",
+                "hami_enabled": True,
                 "victim_sm_limit": 100,
                 "neighbor_enabled": False,
                 "neighbor_sm_limit": None,
             },
             {
-                "name": "P1",
+                "name": "C2",
+                "hami_enabled": True,
                 "victim_sm_limit": 50,
                 "neighbor_enabled": False,
                 "neighbor_sm_limit": None,
             },
             {
-                "name": "P2",
+                "name": "C3",
+                "hami_enabled": True,
                 "victim_sm_limit": 100,
                 "neighbor_enabled": True,
                 "neighbor_sm_limit": 100,
             },
             {
-                "name": "P3",
+                "name": "C4",
+                "hami_enabled": True,
+                "victim_sm_limit": 50,
+                "neighbor_enabled": True,
+                "neighbor_sm_limit": 100,
+            },
+            {
+                "name": "C5",
+                "hami_enabled": True,
                 "victim_sm_limit": 50,
                 "neighbor_enabled": True,
                 "neighbor_sm_limit": 50,
@@ -49,13 +67,18 @@ def write_config(tmp_path: Path, payload: dict) -> Path:
     return path
 
 
-def test_load_config_accepts_the_fixed_four_condition_design(tmp_path):
+def test_load_config_accepts_the_fixed_six_condition_design(tmp_path):
     config = load_config(write_config(tmp_path, valid_payload()))
 
     assert config.blocks == 5
     assert config.victim_target_qps is None
-    assert [condition.name for condition in config.conditions] == ["P0", "P1", "P2", "P3"]
-    assert config.conditions[3].neighbor_sm_limit == 50
+    assert [condition.name for condition in config.conditions] == [
+        "C0", "C1", "C2", "C3", "C4", "C5"
+    ]
+    assert config.conditions[0].hami_enabled is False
+    assert config.conditions[0].victim_sm_limit is None
+    assert config.conditions[4].neighbor_sm_limit == 100
+    assert config.conditions[5].neighbor_sm_limit == 50
 
 
 @pytest.mark.parametrize(
@@ -65,10 +88,13 @@ def test_load_config_accepts_the_fixed_four_condition_design(tmp_path):
         (lambda data: data.update(warmup_seconds=0), "warmup_seconds must be positive"),
         (lambda data: data.update(victim_target_qps=0), "victim_target_qps must be positive"),
         (lambda data: data.update(unexpected=True), "unknown pilot keys"),
-        (lambda data: data["conditions"].pop(), "conditions must be exactly P0, P1, P2, P3"),
         (
-            lambda data: data["conditions"][1].update(victim_sm_limit=60),
-            "P1 does not match the fixed pilot design",
+            lambda data: data["conditions"].pop(),
+            "conditions must be exactly C0, C1, C2, C3, C4, C5",
+        ),
+        (
+            lambda data: data["conditions"][2].update(victim_sm_limit=60),
+            "C2 does not match the fixed pilot design",
         ),
         (
             lambda data: data["conditions"][0].update(unexpected=True),
@@ -86,7 +112,7 @@ def test_load_config_rejects_changes_that_break_the_pilot_design(tmp_path, mutat
 
 def test_load_config_rejects_yaml_that_is_not_a_mapping(tmp_path):
     path = tmp_path / "pilot.yaml"
-    path.write_text("- P0\n- P1\n", encoding="utf-8")
+    path.write_text("- C0\n- C1\n", encoding="utf-8")
 
     with pytest.raises(ConfigError, match="top-level YAML value must be a mapping"):
         load_config(path)

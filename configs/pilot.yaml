@@ -5,19 +5,33 @@ victim_duration_seconds: 300
 neighbor_duration_seconds: 600
 victim_target_qps: null
 conditions:
-  - name: P0
+  - name: C0
+    hami_enabled: false
+    victim_sm_limit: null
+    neighbor_enabled: false
+    neighbor_sm_limit: null
+  - name: C1
+    hami_enabled: true
     victim_sm_limit: 100
     neighbor_enabled: false
     neighbor_sm_limit: null
-  - name: P1
+  - name: C2
+    hami_enabled: true
     victim_sm_limit: 50
     neighbor_enabled: false
     neighbor_sm_limit: null
-  - name: P2
+  - name: C3
+    hami_enabled: true
     victim_sm_limit: 100
     neighbor_enabled: true
     neighbor_sm_limit: 100
-  - name: P3
+  - name: C4
+    hami_enabled: true
+    victim_sm_limit: 50
+    neighbor_enabled: true
+    neighbor_sm_limit: 100
+  - name: C5
+    hami_enabled: true
     victim_sm_limit: 50
     neighbor_enabled: true
     neighbor_sm_limit: 50
