@@ -48,11 +48,11 @@ def env_values(command):
 
 
 def test_build_container_command_uses_independent_role_cache_and_force_quota(tmp_path):
-    run_dir = tmp_path / "b01-o01-P3"
+    run_dir = tmp_path / "b01-o01-C5"
     run_dir.mkdir()
 
-    victim = build_container_command("victim", spec_for("P3"), config_with_qps(), run_dir, assets(tmp_path))
-    neighbor = build_container_command("neighbor", spec_for("P3"), config_with_qps(), run_dir, assets(tmp_path))
+    victim = build_container_command("victim", spec_for("C5"), config_with_qps(), run_dir, assets(tmp_path))
+    neighbor = build_container_command("neighbor", spec_for("C5"), config_with_qps(), run_dir, assets(tmp_path))
 
     victim_env = env_values(victim)
     neighbor_env = env_values(neighbor)
@@ -67,15 +67,50 @@ def test_build_container_command_uses_independent_role_cache_and_force_quota(tmp
 
 
 def test_build_container_command_keeps_same_preload_path_without_force_at_limit_100(tmp_path):
-    run_dir = tmp_path / "b01-o01-P0"
+    run_dir = tmp_path / "b01-o01-C1"
     run_dir.mkdir()
 
-    command = build_container_command("victim", spec_for("P0"), config_with_qps(), run_dir, assets(tmp_path))
+    command = build_container_command("victim", spec_for("C1"), config_with_qps(), run_dir, assets(tmp_path))
     environment = env_values(command)
 
     assert environment["CUDA_DEVICE_SM_LIMIT"] == "100"
     assert environment["LD_PRELOAD"] == "/opt/hami/libvgpu.so"
     assert "GPU_CORE_UTILIZATION_POLICY" not in environment
+
+
+def test_build_container_command_disables_hami_for_native_baseline(tmp_path):
+    run_dir = tmp_path / "b01-o01-C0"
+    run_dir.mkdir()
+
+    command = build_container_command(
+        "victim", spec_for("C0"), config_with_qps(), run_dir, assets(tmp_path)
+    )
+    environment = env_values(command)
+
+    assert environment["LD_PRELOAD"] == ""
+    assert "CUDA_DEVICE_SM_LIMIT" not in environment
+    assert "CUDA_DEVICE_MEMORY_SHARED_CACHE" not in environment
+    assert "HAMI_PROBE_OUTPUT" not in environment
+    assert environment["HAMI_WARMUP_SECONDS"] == "60"
+
+
+def test_build_container_command_keeps_neighbor_fixed_when_only_victim_is_limited(tmp_path):
+    run_dir = tmp_path / "b01-o01-C4"
+    run_dir.mkdir()
+
+    victim = build_container_command(
+        "victim", spec_for("C4"), config_with_qps(), run_dir, assets(tmp_path)
+    )
+    neighbor = build_container_command(
+        "neighbor", spec_for("C4"), config_with_qps(), run_dir, assets(tmp_path)
+    )
+
+    victim_env = env_values(victim)
+    neighbor_env = env_values(neighbor)
+    assert victim_env["CUDA_DEVICE_SM_LIMIT"] == "50"
+    assert victim_env["GPU_CORE_UTILIZATION_POLICY"] == "force"
+    assert neighbor_env["CUDA_DEVICE_SM_LIMIT"] == "100"
+    assert "GPU_CORE_UTILIZATION_POLICY" not in neighbor_env
 
 
 def fake_builder(*, ready=True, sleep=0.05, exit_code=0):
@@ -100,7 +135,7 @@ def fake_builder(*, ready=True, sleep=0.05, exit_code=0):
 
 def test_run_spec_completes_neighbor_then_victim_and_records_status(tmp_path):
     result = run_spec(
-        spec_for("P3"),
+        spec_for("C5"),
         config_with_qps(),
         tmp_path,
         assets=assets(tmp_path),
@@ -118,7 +153,7 @@ def test_run_spec_completes_neighbor_then_victim_and_records_status(tmp_path):
 
 def test_run_spec_preserves_failure_when_neighbor_never_becomes_ready(tmp_path):
     result = run_spec(
-        spec_for("P3"),
+        spec_for("C5"),
         config_with_qps(),
         tmp_path,
         assets=assets(tmp_path),
@@ -134,7 +169,7 @@ def test_run_spec_preserves_failure_when_neighbor_never_becomes_ready(tmp_path):
 
 def test_run_spec_preserves_nonzero_victim_exit(tmp_path):
     result = run_spec(
-        spec_for("P0"),
+        spec_for("C1"),
         config_with_qps(),
         tmp_path,
         assets=assets(tmp_path),
@@ -148,11 +183,11 @@ def test_run_spec_preserves_nonzero_victim_exit(tmp_path):
 
 
 def test_run_spec_refuses_to_overwrite_an_existing_run_directory(tmp_path):
-    run_dir = tmp_path / spec_for("P0").run_id
+    run_dir = tmp_path / spec_for("C1").run_id
     run_dir.mkdir()
 
     result = run_spec(
-        spec_for("P0"),
+        spec_for("C1"),
         config_with_qps(),
         tmp_path,
         assets=assets(tmp_path),

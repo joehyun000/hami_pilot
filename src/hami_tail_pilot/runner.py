@@ -44,7 +44,7 @@ class RunResult:
 CommandBuilder = Callable[[str, RunSpec, PilotConfig, Path, RuntimeAssets], list[str]]
 
 
-def _role_sm_limit(role: str, spec: RunSpec) -> int:
+def _role_sm_limit(role: str, spec: RunSpec) -> int | None:
     if role == "victim":
         return spec.condition.victim_sm_limit
     if role == "neighbor" and spec.condition.neighbor_sm_limit is not None:
@@ -71,19 +71,28 @@ def build_container_command(
     cache_dir = (run_dir / "hami-cache").resolve()
     user_conf = (role_dir / "user.conf").resolve()
     environment = {
-        "CUDA_DEVICE_SM_LIMIT": str(sm_limit),
-        "CUDA_DEVICE_MEMORY_SHARED_CACHE": f"/hami-cache/{role}.cache",
-        "HAMI_PROBE_OUTPUT": "/output/hami_probe.jsonl",
         "HAMI_READY_FILE": "/output/ready",
         "HAMI_WARMUP_SECONDS": str(config.warmup_seconds),
-        "LD_PRELOAD": "/opt/hami/libvgpu.so",
         "LOG_PATH": "/output",
         "ML_MODEL_FILE_WITH_PATH": "/inputs/model.pytorch",
         "DATASET_FILE": "/inputs/dev-v1.1.json",
         "VOCAB_FILE": "/inputs/vocab.txt",
     }
-    if sm_limit < 100:
-        environment["GPU_CORE_UTILIZATION_POLICY"] = "force"
+    if spec.condition.hami_enabled:
+        if sm_limit is None:
+            raise ValueError(f"HAMi-enabled role has no SM limit: {role}")
+        environment.update(
+            {
+                "CUDA_DEVICE_SM_LIMIT": str(sm_limit),
+                "CUDA_DEVICE_MEMORY_SHARED_CACHE": f"/hami-cache/{role}.cache",
+                "HAMI_PROBE_OUTPUT": "/output/hami_probe.jsonl",
+                "LD_PRELOAD": "/opt/hami/libvgpu.so",
+            }
+        )
+        if sm_limit < 100:
+            environment["GPU_CORE_UTILIZATION_POLICY"] = "force"
+    else:
+        environment["LD_PRELOAD"] = ""
 
     command = [
         "docker",
