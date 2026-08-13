@@ -18,7 +18,7 @@ DEFAULT_IMAGE_TAG = "hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0"
 DEFAULT_VANILLA_IMAGE_TAG = "hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0-vanilla"
 DEFAULT_TELEMETRY_COMMAND = (
     "nvidia-smi",
-    "--query-gpu=timestamp,index,utilization.gpu,memory.used,power.draw,clocks.sm",
+    "--query-gpu=timestamp,index,utilization.gpu,memory.used,power.draw,temperature.gpu,clocks.sm",
     "--format=csv,noheader,nounits",
     "-lms",
     "200",

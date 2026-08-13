@@ -4,7 +4,12 @@ from pathlib import Path
 import sys
 
 from hami_tail_pilot.config import load_config
-from hami_tail_pilot.runner import RuntimeAssets, build_container_command, run_spec
+from hami_tail_pilot.runner import (
+    DEFAULT_TELEMETRY_COMMAND,
+    RuntimeAssets,
+    build_container_command,
+    run_spec,
+)
 from hami_tail_pilot.schedule import build_schedule
 
 
@@ -45,6 +50,16 @@ def env_values(command):
             key, value = command[index + 1].split("=", 1)
             values[key] = value
     return values
+
+
+def test_default_gpu_record_includes_temperature_and_clock():
+    query = next(
+        token for token in DEFAULT_TELEMETRY_COMMAND if token.startswith("--query-gpu=")
+    )
+
+    fields = query.removeprefix("--query-gpu=").split(",")
+    assert "temperature.gpu" in fields
+    assert "clocks.sm" in fields
 
 
 def test_build_container_command_uses_independent_role_cache_and_force_quota(tmp_path):

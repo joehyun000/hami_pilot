@@ -5,7 +5,7 @@ __pycache__/
 .cache/
 artifacts/
 runs/
+configs/server.env
 *.egg-info/
 dist/
 build/
-
