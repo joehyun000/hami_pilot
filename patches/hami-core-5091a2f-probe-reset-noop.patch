@@ -1,0 +1,13 @@
+diff --git a/src/multiprocess/multiprocess_utilization_watcher.c b/src/multiprocess/multiprocess_utilization_watcher.c
+index 379d8a1..e29bb54 100644
+--- a/src/multiprocess/multiprocess_utilization_watcher.c
++++ b/src/multiprocess/multiprocess_utilization_watcher.c
+@@ -36,5 +36,8 @@ static int cached_sm_limit[CUDA_DEVICE_MAX_COUNT] = {0};
+ static int cached_util_switch = 0;
+ 
++__attribute__((visibility("default"))) void hami_probe_reset(void) {
++}
++
+ void rate_limiter(int grids, int blocks) {
+   CUdevice current_device;
+   CUresult res = cuCtxGetDevice(&current_device);

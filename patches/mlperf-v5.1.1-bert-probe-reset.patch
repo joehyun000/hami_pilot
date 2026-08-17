@@ -1,0 +1,24 @@
+diff --git a/language/bert/run.py b/language/bert/run.py
+index 6f9afcb..4e8d27d 100644
+--- a/language/bert/run.py
++++ b/language/bert/run.py
+@@ -22,4 +22,5 @@ import mlperf_loadgen as lg
+ import argparse
++import ctypes
+ import os
+ import sys
+ import time
+@@ -108,6 +109,13 @@ def warmup_and_signal_ready(sut):
+ 
+         torch.cuda.synchronize()
+ 
++    if os.environ.get("HAMI_PROBE_OUTPUT"):
++        library = ctypes.CDLL("/opt/hami/libvgpu.so")
++        reset_probe = library.hami_probe_reset
++        reset_probe.argtypes = []
++        reset_probe.restype = None
++        reset_probe()
++
+     ready_file = os.environ.get("HAMI_READY_FILE")
+     if ready_file:
+         fd = os.open(ready_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)

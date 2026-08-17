@@ -17,6 +17,7 @@ class MLPerfMetrics:
     p50_ms: float
     p99_ms: float
     completed_samples: int
+    scheduled_samples_per_second: float | None = None
 
 
 _NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
@@ -69,6 +70,14 @@ def parse_mlperf_summary(
             rf"^Completed samples per second\s*:\s*({_NUMBER})\s*$",
         )
     )
+    scheduled_match = re.search(
+        rf"^Scheduled samples per second\s*:\s*({_NUMBER})\s*$",
+        text,
+        flags=re.MULTILINE,
+    )
+    scheduled_throughput = (
+        float(scheduled_match.group(1)) if scheduled_match is not None else None
+    )
     p50_ns = float(
         _extract(
             text,
@@ -112,6 +121,10 @@ def parse_mlperf_summary(
         raise MLPerfLogError("metrics must be finite and nonnegative")
     if throughput <= 0:
         raise MLPerfLogError("completed samples per second must be positive")
+    if scheduled_throughput is not None and (
+        not math.isfinite(scheduled_throughput) or scheduled_throughput <= 0
+    ):
+        raise MLPerfLogError("scheduled samples per second must be positive and finite")
     if completed_samples <= 0:
         raise MLPerfLogError("completed samples must be positive")
 
@@ -121,6 +134,7 @@ def parse_mlperf_summary(
         p50_ms=p50_ns / 1_000_000,
         p99_ms=p99_ns / 1_000_000,
         completed_samples=completed_samples,
+        scheduled_samples_per_second=scheduled_throughput,
     )
 
 

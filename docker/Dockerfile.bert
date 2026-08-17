@@ -9,7 +9,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY ${HAMI_CORE_SOURCE} /src/HAMi-core
 WORKDIR /src/HAMi-core
-RUN bash ./build.sh
+RUN bash ./build.sh \
+    && nm -D build/libvgpu.so | grep -q ' hami_probe_reset$'
 
 FROM ${PYTORCH_IMAGE}
 ENV DEBIAN_FRONTEND=noninteractive

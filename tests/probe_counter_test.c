@@ -18,6 +18,8 @@ int main(void) {
   hami_probe_record_limiter_call();
   hami_probe_record_limiter_call();
   hami_probe_record_wait(2, 12000000);
+  hami_probe_reset_counters();
+  hami_probe_record_limiter_call();
   assert(hami_probe_flush() == 0);
 
   FILE *file = fopen(path, "r");
@@ -28,9 +30,9 @@ int main(void) {
   unlink(path);
 
   assert(strstr(line, "\"schema_version\":1") != NULL);
-  assert(strstr(line, "\"limiter_calls\":2") != NULL);
-  assert(strstr(line, "\"waited_calls\":1") != NULL);
-  assert(strstr(line, "\"sleep_calls\":2") != NULL);
-  assert(strstr(line, "\"wait_ns\":12000000") != NULL);
+  assert(strstr(line, "\"limiter_calls\":1") != NULL);
+  assert(strstr(line, "\"waited_calls\":0") != NULL);
+  assert(strstr(line, "\"sleep_calls\":0") != NULL);
+  assert(strstr(line, "\"wait_ns\":0") != NULL);
   return 0;
 }

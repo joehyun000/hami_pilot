@@ -97,11 +97,20 @@ ensure_checkout() {
 apply_once() {
   local destination="$1"
   local patch="$2"
+  local marker_name="$3"
+  local marker_dir="$destination/.git/pilot-patches"
+  local marker="$marker_dir/$marker_name"
+  if [[ -f "$marker" ]]; then
+    return
+  fi
+  mkdir -p "$marker_dir"
   if git -C "$destination" apply --check "$patch"; then
     git -C "$destination" apply "$patch"
+    touch "$marker"
     return
   fi
   if git -C "$destination" apply --reverse --check "$patch"; then
+    touch "$marker"
     return
   fi
   printf 'patch is neither cleanly applicable nor already applied: %s\n' "$patch" >&2
@@ -111,8 +120,14 @@ apply_once() {
 ensure_checkout "https://github.com/Project-HAMi/HAMi-core.git" "$HAMI_CORE_COMMIT" "$HAMI_CORE_DIR"
 install -m 0644 "$PILOT_ROOT/probe/hami_probe_counter.h" \
   "$HAMI_CORE_DIR/src/multiprocess/hami_probe_counter.h"
-apply_once "$HAMI_CORE_DIR" "$PILOT_ROOT/patches/hami-core-5091a2f-probe.patch"
+apply_once "$HAMI_CORE_DIR" "$PILOT_ROOT/patches/hami-core-5091a2f-probe.patch" \
+  "hami-probe-v1"
+apply_once "$HAMI_CORE_DIR" "$PILOT_ROOT/patches/hami-core-5091a2f-probe-reset.patch" \
+  "hami-probe-reset-v1"
 ensure_checkout "https://github.com/Project-HAMi/HAMi-core.git" "$HAMI_CORE_COMMIT" "$HAMI_CORE_VANILLA_DIR"
+apply_once "$HAMI_CORE_VANILLA_DIR" \
+  "$PILOT_ROOT/patches/hami-core-5091a2f-probe-reset-noop.patch" \
+  "hami-probe-reset-noop-v1"
 
 ensure_checkout "https://github.com/mlcommons/inference.git" "$MLPERF_COMMIT" "$MLPERF_DIR"
 git -C "$MLPERF_DIR" submodule sync -- language/bert/DeepLearningExamples
@@ -128,7 +143,10 @@ if [[ "$actual_deep_learning_examples_commit" != "$DEEP_LEARNING_EXAMPLES_COMMIT
 fi
 verify_bert_source_tree "$MLPERF_DIR"
 stage_bert_runtime_files "$MLPERF_DIR" "$BERT_RUNTIME_DIR"
-apply_once "$MLPERF_DIR" "$PILOT_ROOT/patches/mlperf-v5.1.1-bert-pilot.patch"
+apply_once "$MLPERF_DIR" "$PILOT_ROOT/patches/mlperf-v5.1.1-bert-pilot.patch" \
+  "mlperf-bert-pilot-v1"
+apply_once "$MLPERF_DIR" "$PILOT_ROOT/patches/mlperf-v5.1.1-bert-probe-reset.patch" \
+  "mlperf-bert-probe-reset-v1"
 
 MANIFEST="$PILOT_ROOT/artifacts/source_manifest.json"
 python3 -c 'import json,pathlib,sys; pathlib.Path(sys.argv[1]).write_text(json.dumps({"hami_release":sys.argv[2],"hami_commit":sys.argv[3],"hami_core_commit":sys.argv[4],"deep_learning_examples_commit":sys.argv[5],"mlperf_release":sys.argv[6],"mlperf_commit":sys.argv[7]},indent=2,sort_keys=True)+"\n",encoding="utf-8")' \

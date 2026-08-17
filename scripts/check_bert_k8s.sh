@@ -37,10 +37,50 @@ TARGET_QPS=1
 WARMUP_SECONDS=60
 MEASUREMENT_SECONDS=30
 SM_LIMIT=100
+EXPECT_WAIT=false
+PRINT_PLAN=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --limited)
+      [[ $# -ge 2 ]] || {
+        printf '사용법: scripts/check_bert_k8s.sh [--limited <초당 요청 수>] [--print-plan]\n' >&2
+        exit 2
+      }
+      TARGET_QPS="$2"
+      SM_LIMIT=50
+      EXPECT_WAIT=true
+      shift 2
+      ;;
+    --print-plan)
+      PRINT_PLAN=true
+      shift
+      ;;
+    *)
+      printf '사용법: scripts/check_bert_k8s.sh [--limited <초당 요청 수>] [--print-plan]\n' >&2
+      exit 2
+      ;;
+  esac
+done
+
+python3 - "$TARGET_QPS" <<'PY'
+import math
+import sys
+
+try:
+    target = float(sys.argv[1])
+except ValueError as exc:
+    raise SystemExit("초당 요청 수는 숫자여야 합니다") from exc
+if not math.isfinite(target) or target <= 0:
+    raise SystemExit("초당 요청 수는 0보다 큰 유한한 값이어야 합니다")
+PY
 
 print_plan() {
+  printf '%s\n' '{'
+  if [[ "$EXPECT_WAIT" == true ]]; then
+    printf '  "expect_wait": true,\n'
+  fi
   printf '%s\n' \
-    '{' \
     "  \"image\": \"$PROBE_IMAGE\"," \
     "  \"measurement_seconds\": $MEASUREMENT_SECONDS," \
     "  \"node\": \"$PILOT_K8S_BUILD_NODE\"," \
@@ -50,13 +90,9 @@ print_plan() {
     '}'
 }
 
-if [[ "${1:-}" == "--print-plan" ]]; then
+if [[ "$PRINT_PLAN" == true ]]; then
   print_plan
   exit 0
-fi
-if [[ $# -ne 0 ]]; then
-  printf '사용법: scripts/check_bert_k8s.sh [--print-plan]\n' >&2
-  exit 2
 fi
 
 case "$PILOT_ROOT" in
@@ -118,7 +154,16 @@ YAML
 )
 fi
 
-printf 'BERT 한 작업을 100%% 조건으로 실행합니다.\n'
+UTILIZATION_POLICY=""
+if [[ "$EXPECT_WAIT" == true ]]; then
+  UTILIZATION_POLICY=$(cat <<'YAML'
+            - name: GPU_CORE_UTILIZATION_POLICY
+              value: force
+YAML
+)
+fi
+
+printf 'BERT 한 작업을 %s%% 조건으로 실행합니다.\n' "$SM_LIMIT"
 printf '요청량은 초당 %s건이며, 이번 검사는 성능 비교가 아닙니다.\n' "$TARGET_QPS"
 
 kubectl -n "$PILOT_K8S_NAMESPACE" delete job "$JOB_NAME" --ignore-not-found=true
@@ -154,6 +199,7 @@ $IMAGE_PULL_SECRETS
               value: /opt/hami/libvgpu.so
             - name: CUDA_DEVICE_SM_LIMIT
               value: "$SM_LIMIT"
+$UTILIZATION_POLICY
             - name: CUDA_DEVICE_MEMORY_SHARED_CACHE
               value: /output/victim.cache
             - name: HAMI_PROBE_OUTPUT
@@ -220,7 +266,8 @@ fi
 }
 
 PYTHONPATH="$PILOT_ROOT/src${PYTHONPATH:+:$PYTHONPATH}" \
-python3 - "$SUMMARY_FILE" "$DETAIL_FILE" "$PROBE_FILE" <<'PY'
+python3 - "$SUMMARY_FILE" "$DETAIL_FILE" "$PROBE_FILE" \
+  "$TARGET_QPS" "$EXPECT_WAIT" <<'PY'
 from pathlib import Path
 import sys
 
@@ -238,18 +285,42 @@ except (MLPerfLogError, ProbeLogError) as exc:
 
 if probe.limiter_calls <= 0:
     raise SystemExit("HAMi가 BERT GPU 작업을 확인한 기록이 없습니다")
-if probe.waited_calls != 0 or probe.wait_ns != 0:
+
+target_qps = float(sys.argv[4])
+expect_wait = sys.argv[5] == "true"
+if metrics.scheduled_samples_per_second is None:
+    raise SystemExit("실제로 요청을 보낸 속도 기록이 없습니다")
+if (
+    metrics.completed_samples_per_second
+    < metrics.scheduled_samples_per_second * 0.98
+):
+    raise SystemExit(
+        "이 요청량은 처리 능력보다 높아 요청이 쌓일 가능성이 있습니다: "
+        f"보냄={metrics.scheduled_samples_per_second:.3f}, "
+        f"완료={metrics.completed_samples_per_second:.3f}"
+    )
+if expect_wait:
+    if probe.waited_calls <= 0 or probe.wait_ns <= 0:
+        raise SystemExit(
+            "이 요청량에서는 50% 사용 한도에 의한 실행 대기가 기록되지 않았습니다"
+        )
+elif probe.waited_calls != 0 or probe.wait_ns != 0:
     raise SystemExit("100% 작업에서 HAMi 사용량 제한으로 인한 대기가 발생했습니다")
 
 if metrics.result_validity == "INVALID":
     print("짧은 확인이라 공식 MLPerf 조기 종료 필요 요청 수는 충족하지 않았습니다.")
 print("완료된 BERT 요청 수:", metrics.completed_samples)
+print("실제로 요청을 보낸 속도:", round(metrics.scheduled_samples_per_second, 3))
 print("초당 완료 요청 수:", round(metrics.completed_samples_per_second, 3))
 print("가운데 응답시간(ms):", round(metrics.p50_ms, 3))
 print("전체 요청의 99%가 완료되는 응답시간 경계(ms):", round(metrics.p99_ms, 3))
 print("HAMi 제한 기능 확인 횟수:", probe.limiter_calls)
 print("HAMi 사용량 제한으로 인한 실행 대기 횟수:", probe.waited_calls)
-print("BERT 한 작업 실행 확인 완료")
+print("실행 대기 누적시간(초):", round(probe.wait_ns / 1_000_000_000, 6))
+if expect_wait:
+    print("50% 작업의 후보 요청량 확인 완료")
+else:
+    print("BERT 한 작업 실행 확인 완료")
 PY
 
 printf '확인 결과 위치: %s\n' "$OUTPUT_DIR"

@@ -5,6 +5,7 @@ SUT name : PySUT
 Scenario : Server
 Mode     : PerformanceOnly
 Completed samples per second    : 1.23
+Scheduled samples per second    : 1.25
 Result is : INVALID
   Performance constraints satisfied : Yes
   Min duration satisfied : Yes

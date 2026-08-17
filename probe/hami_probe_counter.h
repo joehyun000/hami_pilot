@@ -24,6 +24,13 @@ static inline void hami_probe_record_wait(uint64_t sleep_calls, uint64_t wait_ns
   atomic_fetch_add_explicit(&hami_probe_wait_ns, wait_ns, memory_order_relaxed);
 }
 
+static inline void hami_probe_reset_counters(void) {
+  atomic_store_explicit(&hami_probe_limiter_calls, 0, memory_order_relaxed);
+  atomic_store_explicit(&hami_probe_waited_calls, 0, memory_order_relaxed);
+  atomic_store_explicit(&hami_probe_sleep_calls, 0, memory_order_relaxed);
+  atomic_store_explicit(&hami_probe_wait_ns, 0, memory_order_relaxed);
+}
+
 static inline int hami_probe_flush(void) {
   const char *path = getenv("HAMI_PROBE_OUTPUT");
   if (path == NULL || path[0] == '\0') {

@@ -1,0 +1,16 @@
+diff --git a/src/multiprocess/multiprocess_utilization_watcher.c b/src/multiprocess/multiprocess_utilization_watcher.c
+index fb44533..5ced47a 100644
+--- a/src/multiprocess/multiprocess_utilization_watcher.c
++++ b/src/multiprocess/multiprocess_utilization_watcher.c
+@@ -49,6 +49,11 @@ __attribute__((destructor)) static void flush_hami_probe(void) {
+   hami_probe_flush();
+ }
+ 
++__attribute__((visibility("default"))) void hami_probe_reset(void) {
++  hami_probe_reset_counters();
++}
++
++
+ void rate_limiter(int grids, int blocks) {
+   hami_probe_record_limiter_call();
+ 

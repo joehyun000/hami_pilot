@@ -53,6 +53,7 @@ def test_parse_mlperf_readiness_accepts_a_short_run_that_only_misses_early_stopp
     assert metrics.result_validity == "INVALID"
     assert metrics.completed_samples == 38
     assert metrics.completed_samples_per_second == 1.23
+    assert metrics.scheduled_samples_per_second == 1.25
     assert metrics.p50_ms == 19.545328
     assert metrics.p99_ms == 28.357917
 

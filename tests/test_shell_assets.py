@@ -345,6 +345,32 @@ def test_kubernetes_single_bert_check_uses_a_low_request_rate_and_no_limit_wait(
     assert "nvidia.com/gpu: 1" in script
 
 
+def test_kubernetes_single_bert_check_can_plan_a_limited_candidate():
+    result = run_script(
+        "scripts/check_bert_k8s.sh",
+        "--limited",
+        "5",
+        "--print-plan",
+        env={
+            "PILOT_K8S_NAMESPACE": "test-namespace",
+            "PILOT_K8S_BUILD_NODE": "test-gpu-node",
+            "PILOT_NFS_SERVER": "nfs.example.test",
+            "PILOT_NFS_ROOT": "/shared",
+            "PILOT_REGISTRY": "ghcr.io/test-user",
+        },
+    )
+
+    assert json.loads(result.stdout) == {
+        "expect_wait": True,
+        "image": "ghcr.io/test-user/hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0",
+        "measurement_seconds": 30,
+        "node": "test-gpu-node",
+        "sm_limit": 50,
+        "target_qps": 5,
+        "warmup_seconds": 60,
+    }
+
+
 def test_kubernetes_job_wait_stops_immediately_when_the_job_has_failed(tmp_path):
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
