@@ -244,6 +244,35 @@ def test_bert_input_download_script_reports_pinned_sources_and_checksums():
     assert "md5sum" in script
 
 
+def test_kubernetes_single_bert_check_uses_a_low_request_rate_and_no_limit_wait():
+    result = run_script(
+        "scripts/check_bert_k8s.sh",
+        "--print-plan",
+        env={
+            "PILOT_K8S_NAMESPACE": "test-namespace",
+            "PILOT_K8S_BUILD_NODE": "test-gpu-node",
+            "PILOT_NFS_SERVER": "nfs.example.test",
+            "PILOT_NFS_ROOT": "/shared",
+            "PILOT_REGISTRY": "ghcr.io/test-user",
+        },
+    )
+
+    assert json.loads(result.stdout) == {
+        "image": "ghcr.io/test-user/hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0",
+        "measurement_seconds": 30,
+        "node": "test-gpu-node",
+        "sm_limit": 100,
+        "target_qps": 1,
+        "warmup_seconds": 60,
+    }
+
+    script = (ROOT / "scripts/check_bert_k8s.sh").read_text(encoding="utf-8")
+    assert "eval_features.pickle" in script
+    assert "mlperf_log_summary.txt" in script
+    assert "waited_calls" in script
+    assert "nvidia.com/gpu: 1" in script
+
+
 def test_gpu_pilot_prepare_dry_run_stops_after_the_short_condition_check(tmp_path):
     env_file = write_server_env(tmp_path)
 
@@ -295,6 +324,7 @@ def test_shell_scripts_are_valid_bash_programs():
         "scripts/build_images.sh",
         "scripts/build_images_k8s.sh",
         "scripts/check_probe_k8s.sh",
+        "scripts/check_bert_k8s.sh",
         "scripts/configure_registry_auth_k8s.sh",
         "scripts/download_bert_inputs.sh",
         "scripts/run_gpu_pilot.sh",
