@@ -199,6 +199,11 @@ fi
 kubectl -n "$PILOT_K8S_NAMESPACE" logs \
   "job/$JOB_NAME" --all-containers=true
 
+if [[ ! -s "$FEATURE_CACHE_FILE" && -s "$OUTPUT_DIR/eval_features.pickle" ]]; then
+  mv "$OUTPUT_DIR/eval_features.pickle" "$FEATURE_CACHE_FILE"
+  printf 'BERT 자료 변환 결과를 다음 실행용으로 보존했습니다.\n'
+fi
+
 [[ -s "$SUMMARY_FILE" ]] || {
   printf 'MLPerf 응답시간 요약 파일이 없습니다: %s\n' \
     "$SUMMARY_FILE" >&2
@@ -209,69 +214,34 @@ kubectl -n "$PILOT_K8S_NAMESPACE" logs \
   exit 1
 }
 
+PYTHONPATH="$PILOT_ROOT/src${PYTHONPATH:+:$PYTHONPATH}" \
 python3 - "$SUMMARY_FILE" "$PROBE_FILE" <<'PY'
-import json
 from pathlib import Path
-import re
 import sys
 
-summary_path = Path(sys.argv[1])
-probe_path = Path(sys.argv[2])
-summary = summary_path.read_text(encoding="utf-8")
+from hami_tail_pilot.mlperf import MLPerfLogError, parse_mlperf_readiness_summary
+from hami_tail_pilot.probe import ProbeLogError, parse_probe_jsonl
 
-def extract(pattern, label, cast=float):
-    match = re.search(pattern, summary, flags=re.MULTILINE)
-    if match is None:
-        raise SystemExit(f"MLPerf 기록에 {label}이(가) 없습니다")
-    return cast(match.group(1))
+try:
+    metrics = parse_mlperf_readiness_summary(Path(sys.argv[1]))
+    probe = parse_probe_jsonl(Path(sys.argv[2]))
+except (MLPerfLogError, ProbeLogError) as exc:
+    raise SystemExit(str(exc)) from exc
 
-validity = extract(r"^Result is\s*:\s*(\S+)\s*$", "유효성", str)
-completed = extract(r"^Completed samples\s*:\s*(\d+)\s*$", "완료 요청 수", int)
-throughput = extract(
-    r"^Completed samples per second\s*:\s*([0-9.eE+-]+)\s*$",
-    "초당 완료 요청 수",
-)
-p50_ns = extract(
-    r"^50\.00 percentile latency \(ns\)\s*:\s*([0-9.eE+-]+)\s*$",
-    "가운데 응답시간",
-)
-p99_ns = extract(
-    r"^99\.00 percentile latency \(ns\)\s*:\s*([0-9.eE+-]+)\s*$",
-    "99% 완료 응답시간 경계",
-)
-
-if validity != "VALID":
-    raise SystemExit(f"MLPerf 결과가 유효하지 않습니다: {validity}")
-if completed <= 0 or throughput <= 0:
-    raise SystemExit("완료된 BERT 요청이 없습니다")
-
-records = [
-    json.loads(line)
-    for line in probe_path.read_text(encoding="utf-8").splitlines()
-    if line.strip()
-]
-if not records:
-    raise SystemExit("HAMi 확인 기록이 비어 있습니다")
-limiter_calls = sum(int(record["limiter_calls"]) for record in records)
-waited_calls = sum(int(record["waited_calls"]) for record in records)
-wait_ns = sum(int(record["wait_ns"]) for record in records)
-if limiter_calls <= 0:
+if probe.limiter_calls <= 0:
     raise SystemExit("HAMi가 BERT GPU 작업을 확인한 기록이 없습니다")
-if waited_calls != 0 or wait_ns != 0:
+if probe.waited_calls != 0 or probe.wait_ns != 0:
     raise SystemExit("100% 작업에서 HAMi 사용량 제한으로 인한 대기가 발생했습니다")
 
-print("완료된 BERT 요청 수:", completed)
-print("초당 완료 요청 수:", round(throughput, 3))
-print("가운데 응답시간(ms):", round(p50_ns / 1_000_000, 3))
-print("전체 요청의 99%가 완료되는 응답시간 경계(ms):", round(p99_ns / 1_000_000, 3))
-print("HAMi 제한 기능 확인 횟수:", limiter_calls)
-print("HAMi 사용량 제한으로 인한 실행 대기 횟수:", waited_calls)
+if metrics.result_validity == "INVALID":
+    print("짧은 확인이라 공식 MLPerf 조기 종료 필요 요청 수는 충족하지 않았습니다.")
+print("완료된 BERT 요청 수:", metrics.completed_samples)
+print("초당 완료 요청 수:", round(metrics.completed_samples_per_second, 3))
+print("가운데 응답시간(ms):", round(metrics.p50_ms, 3))
+print("전체 요청의 99%가 완료되는 응답시간 경계(ms):", round(metrics.p99_ms, 3))
+print("HAMi 제한 기능 확인 횟수:", probe.limiter_calls)
+print("HAMi 사용량 제한으로 인한 실행 대기 횟수:", probe.waited_calls)
 print("BERT 한 작업 실행 확인 완료")
 PY
-
-if [[ ! -s "$FEATURE_CACHE_FILE" && -s "$OUTPUT_DIR/eval_features.pickle" ]]; then
-  mv "$OUTPUT_DIR/eval_features.pickle" "$FEATURE_CACHE_FILE"
-  printf 'BERT 자료 변환 결과를 다음 실행용으로 보존했습니다.\n'
-fi
 
 printf '확인 결과 위치: %s\n' "$OUTPUT_DIR"

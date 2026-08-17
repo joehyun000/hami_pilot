@@ -41,15 +41,19 @@ def _extract(text: str, label: str, pattern: str) -> str:
     return match.group(1)
 
 
+def _read_summary(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise MLPerfLogError(f"cannot read MLPerf summary: {exc}") from exc
+
+
 def parse_mlperf_summary(
     path: Path,
     *,
     require_valid: bool = True,
 ) -> MLPerfMetrics:
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise MLPerfLogError(f"cannot read MLPerf summary: {exc}") from exc
+    text = _read_summary(path)
 
     validity = _extract(text, "result validity", r"^Result is\s*:\s*(\S+)\s*$")
     if validity not in {"VALID", "INVALID"}:
@@ -78,9 +82,16 @@ def parse_mlperf_summary(
             rf"^99\.00 percentile latency \(ns\)\s*:\s*({_NUMBER})\s*$",
         )
     )
-    completed_samples = int(
-        _extract(text, "completed samples", r"^Completed samples\s*:\s*(\d+)\s*$")
+    completed_match = re.search(
+        r"^Completed samples\s*:\s*(\d+)\s*$", text, flags=re.MULTILINE
     )
+    if completed_match is None:
+        completed_match = re.search(
+            r"^- Processed\s+(\d+)\s+queries\.\s*$", text, flags=re.MULTILINE
+        )
+    if completed_match is None:
+        raise MLPerfLogError("missing completed samples")
+    completed_samples = int(completed_match.group(1))
 
     if not all(
         math.isfinite(value) and value >= 0 for value in (throughput, p50_ns, p99_ns)
@@ -98,3 +109,24 @@ def parse_mlperf_summary(
         p99_ms=p99_ns / 1_000_000,
         completed_samples=completed_samples,
     )
+
+
+def parse_mlperf_readiness_summary(path: Path) -> MLPerfMetrics:
+    metrics = parse_mlperf_summary(path, require_valid=False)
+    if metrics.result_validity == "VALID":
+        return metrics
+
+    text = _read_summary(path)
+    required_patterns = (
+        r"^\s*Performance constraints satisfied\s*:\s*Yes\s*$",
+        r"^\s*Min duration satisfied\s*:\s*Yes\s*$",
+        r"^\s*Min queries satisfied\s*:\s*Yes\s*$",
+        r"^\s*Early stopping satisfied\s*:\s*NO\s*$",
+        r"^No errors encountered during test\.\s*$",
+    )
+    if not all(
+        re.search(pattern, text, flags=re.MULTILINE) is not None
+        for pattern in required_patterns
+    ):
+        raise MLPerfLogError("short readiness run failed for a reason other than early stopping")
+    return metrics

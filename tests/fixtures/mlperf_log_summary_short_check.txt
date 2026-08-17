@@ -1,0 +1,26 @@
+================================================
+MLPerf Results Summary
+================================================
+SUT name : PySUT
+Scenario : Server
+Mode     : PerformanceOnly
+Completed samples per second    : 1.23
+Result is : INVALID
+  Performance constraints satisfied : Yes
+  Min duration satisfied : Yes
+  Min queries satisfied : Yes
+  Early stopping satisfied: NO
+Recommendations:
+Early Stopping Result:
+- Run unsuccessful.
+- Processed 38 queries.
+- Would need to run at least 421 more queries,
+ with the run being successful if every additional
+ query were under latency.
+
+50.00 percentile latency (ns)   : 19545328
+99.00 percentile latency (ns)   : 28357917
+
+No warnings encountered during test.
+
+No errors encountered during test.

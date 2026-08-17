@@ -4,6 +4,7 @@ import pytest
 
 from hami_tail_pilot.mlperf import (
     MLPerfLogError,
+    parse_mlperf_readiness_summary,
     parse_mlperf_summary,
     render_user_conf,
 )
@@ -42,6 +43,32 @@ def test_parse_mlperf_summary_can_retain_invalid_candidate_metrics(tmp_path):
 
     assert metrics.result_validity == "INVALID"
     assert metrics.completed_samples_per_second == 7.2
+
+
+def test_parse_mlperf_readiness_accepts_a_short_run_that_only_misses_early_stopping():
+    metrics = parse_mlperf_readiness_summary(
+        Path("tests/fixtures/mlperf_log_summary_short_check.txt")
+    )
+
+    assert metrics.result_validity == "INVALID"
+    assert metrics.completed_samples == 38
+    assert metrics.completed_samples_per_second == 1.23
+    assert metrics.p50_ms == 19.545328
+    assert metrics.p99_ms == 28.357917
+
+
+def test_parse_mlperf_readiness_rejects_a_short_run_with_failed_constraints(tmp_path):
+    summary = Path("tests/fixtures/mlperf_log_summary_short_check.txt").read_text(
+        encoding="utf-8"
+    )
+    path = tmp_path / "mlperf_log_summary.txt"
+    path.write_text(
+        summary.replace("Performance constraints satisfied : Yes", "Performance constraints satisfied : No"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(MLPerfLogError, match="short readiness run failed"):
+        parse_mlperf_readiness_summary(path)
 
 
 @pytest.mark.parametrize(
