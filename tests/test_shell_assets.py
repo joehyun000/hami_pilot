@@ -87,6 +87,13 @@ def test_build_script_distinguishes_probe_and_vanilla_images_for_overhead_ablati
     }
 
 
+def test_bert_image_uses_blackwell_compatible_pytorch_and_cuda():
+    dockerfile = (ROOT / "docker/Dockerfile.bert").read_text(encoding="utf-8")
+
+    assert "nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04" in dockerfile
+    assert "pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime" in dockerfile
+
+
 def test_gpu_pilot_prepare_dry_run_stops_after_the_short_condition_check(tmp_path):
     env_file = write_server_env(tmp_path)
 

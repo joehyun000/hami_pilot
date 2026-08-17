@@ -1,5 +1,5 @@
-ARG HAMI_BUILD_IMAGE=nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
-ARG PYTORCH_IMAGE=pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+ARG HAMI_BUILD_IMAGE=nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04
+ARG PYTORCH_IMAGE=pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime
 
 FROM ${HAMI_BUILD_IMAGE} AS hami-builder
 ARG HAMI_CORE_SOURCE=.cache/sources/HAMi-core-5091a2f
