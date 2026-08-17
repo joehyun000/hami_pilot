@@ -19,6 +19,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential git \
     && rm -rf /var/lib/apt/lists/*
 COPY .cache/sources/inference-v5.1.1 /opt/mlperf/inference
+COPY .cache/sources/bert-runtime-b03375bd/tokenization.py /opt/mlperf/inference/language/bert/tokenization.py
+COPY .cache/sources/bert-runtime-b03375bd/file_utils.py /opt/mlperf/inference/language/bert/file_utils.py
 RUN python3 -m pip install --no-cache-dir \
       "absl-py>=2,<3" "boto3==1.35.99" "numpy<2" \
       "pybind11>=2.12,<3" "transformers==4.46.3" \

@@ -117,6 +117,33 @@ def test_bootstrap_accepts_a_complete_bert_linked_source_tree(tmp_path):
     assert "BERT 연결 소스 확인 완료" in result.stdout
 
 
+def test_bootstrap_stages_bert_runtime_files_outside_the_linked_repository(tmp_path):
+    mlperf_source = tmp_path / "mlperf"
+    bert_source = (
+        mlperf_source
+        / "language"
+        / "bert"
+        / "DeepLearningExamples"
+        / "PyTorch"
+        / "LanguageModeling"
+        / "BERT"
+    )
+    bert_source.mkdir(parents=True)
+    (bert_source / "tokenization.py").write_text("tokenization\n", encoding="utf-8")
+    (bert_source / "file_utils.py").write_text("file-utils\n", encoding="utf-8")
+    destination = tmp_path / "staged"
+
+    run_script(
+        "scripts/bootstrap_sources.sh",
+        "--stage-bert-runtime-files",
+        str(mlperf_source),
+        str(destination),
+    )
+
+    assert (destination / "tokenization.py").read_text(encoding="utf-8") == "tokenization\n"
+    assert (destination / "file_utils.py").read_text(encoding="utf-8") == "file-utils\n"
+
+
 def test_build_script_reports_the_versioned_image_tag_without_docker_access():
     result = run_script("scripts/build_images.sh", "--print-tag")
 
@@ -261,6 +288,8 @@ def test_bert_image_uses_blackwell_compatible_pytorch_and_cuda():
     assert "nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04" in dockerfile
     assert "pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime" in dockerfile
     assert '"boto3==1.35.99"' in dockerfile
+    assert "bert-runtime-b03375bd/tokenization.py" in dockerfile
+    assert "bert-runtime-b03375bd/file_utils.py" in dockerfile
     assert 'python3 -c "import tokenization"' in dockerfile
 
 

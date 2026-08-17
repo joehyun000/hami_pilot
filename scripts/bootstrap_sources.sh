@@ -22,6 +22,17 @@ verify_bert_source_tree() {
   printf 'BERT 연결 소스 확인 완료: %s\n' "$bert_source"
 }
 
+stage_bert_runtime_files() {
+  local mlperf_dir="$1"
+  local destination="$2"
+  local bert_source="$mlperf_dir/language/bert/DeepLearningExamples/PyTorch/LanguageModeling/BERT"
+  verify_bert_source_tree "$mlperf_dir"
+  mkdir -p "$destination"
+  install -m 0644 "$bert_source/tokenization.py" "$destination/tokenization.py"
+  install -m 0644 "$bert_source/file_utils.py" "$destination/file_utils.py"
+  printf 'BERT 실행 파일 준비 완료: %s\n' "$destination"
+}
+
 if [[ "${1:-}" == "--print-pins" ]]; then
   printf '{"hami_release":"%s","hami_commit":"%s","hami_core_commit":"%s","deep_learning_examples_commit":"%s","mlperf_release":"%s","mlperf_commit":"%s"}\n' \
     "$HAMI_RELEASE" "$HAMI_COMMIT" "$HAMI_CORE_COMMIT" \
@@ -36,8 +47,16 @@ if [[ "${1:-}" == "--verify-bert-source-tree" ]]; then
   verify_bert_source_tree "$2"
   exit 0
 fi
+if [[ "${1:-}" == "--stage-bert-runtime-files" ]]; then
+  [[ $# -eq 3 ]] || {
+    printf '사용법: scripts/bootstrap_sources.sh --stage-bert-runtime-files <MLPerf 소스 경로> <준비 경로>\n' >&2
+    exit 2
+  }
+  stage_bert_runtime_files "$2" "$3"
+  exit 0
+fi
 if [[ $# -ne 0 ]]; then
-  printf '사용법: scripts/bootstrap_sources.sh [--print-pins | --verify-bert-source-tree <MLPerf 소스 경로>]\n' >&2
+  printf '사용법: scripts/bootstrap_sources.sh [--print-pins | --verify-bert-source-tree <MLPerf 소스 경로> | --stage-bert-runtime-files <MLPerf 소스 경로> <준비 경로>]\n' >&2
   exit 2
 fi
 
@@ -47,6 +66,7 @@ SOURCE_ROOT="$PILOT_ROOT/.cache/sources"
 HAMI_CORE_DIR="$SOURCE_ROOT/HAMi-core-5091a2f"
 HAMI_CORE_VANILLA_DIR="$SOURCE_ROOT/HAMi-core-5091a2f-vanilla"
 MLPERF_DIR="$SOURCE_ROOT/inference-v5.1.1"
+BERT_RUNTIME_DIR="$SOURCE_ROOT/bert-runtime-b03375bd"
 
 mkdir -p "$SOURCE_ROOT" "$PILOT_ROOT/artifacts"
 
@@ -107,6 +127,7 @@ if [[ "$actual_deep_learning_examples_commit" != "$DEEP_LEARNING_EXAMPLES_COMMIT
   exit 1
 fi
 verify_bert_source_tree "$MLPERF_DIR"
+stage_bert_runtime_files "$MLPERF_DIR" "$BERT_RUNTIME_DIR"
 apply_once "$MLPERF_DIR" "$PILOT_ROOT/patches/mlperf-v5.1.1-bert-pilot.patch"
 
 MANIFEST="$PILOT_ROOT/artifacts/source_manifest.json"
