@@ -109,6 +109,16 @@ def test_kubernetes_build_script_reports_internal_registry_tags():
     }
 
 
+def test_kubernetes_probe_check_uses_one_gpu_and_a_fifty_percent_limit():
+    script = (ROOT / "scripts/check_probe_k8s.sh").read_text(encoding="utf-8")
+
+    assert 'CUDA_DEVICE_SM_LIMIT' in script
+    assert 'value: "50"' in script
+    assert 'nvidia.com/gpu: 1' in script
+    assert 'HAMI_PROBE_OUTPUT' in script
+    assert 'waited_calls' in script
+
+
 def test_bert_image_uses_blackwell_compatible_pytorch_and_cuda():
     dockerfile = (ROOT / "docker/Dockerfile.bert").read_text(encoding="utf-8")
 
@@ -166,6 +176,7 @@ def test_shell_scripts_are_valid_bash_programs():
         "scripts/bootstrap_sources.sh",
         "scripts/build_images.sh",
         "scripts/build_images_k8s.sh",
+        "scripts/check_probe_k8s.sh",
         "scripts/run_gpu_pilot.sh",
     ):
         subprocess.run(["bash", "-n", str(ROOT / relative_path)], check=True)
