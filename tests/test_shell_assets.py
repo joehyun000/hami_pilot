@@ -9,10 +9,10 @@ ROOT = Path(__file__).parents[1]
 
 
 def run_script(
-    path: str, argument: str, *, env: dict[str, str] | None = None
+    path: str, *arguments: str, env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["bash", str(ROOT / path), argument],
+        ["bash", str(ROOT / path), *arguments],
         cwd=ROOT,
         check=True,
         capture_output=True,
@@ -71,9 +71,50 @@ def test_bootstrap_reports_the_exact_upstream_commits_without_network_access():
         "hami_release": "v2.9.0",
         "hami_commit": "3a006c6ae2f077a2683df7805c43656c07f6dc15",
         "hami_core_commit": "5091a2fbe1816df1265490f771346730f29e2c8d",
+        "deep_learning_examples_commit": "b03375bd6c2c5233130e61a3be49e26d1a20ac7c",
         "mlperf_release": "v5.1.1",
         "mlperf_commit": "6776245e99dce0600cfc9a6fb61efd310f87de3d",
     }
+
+
+def test_bootstrap_rejects_a_bert_source_tree_without_its_linked_tokenizer(tmp_path):
+    result = subprocess.run(
+        [
+            "bash",
+            str(ROOT / "scripts/bootstrap_sources.sh"),
+            "--verify-bert-source-tree",
+            str(tmp_path),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "tokenization.py" in result.stderr
+
+
+def test_bootstrap_accepts_a_complete_bert_linked_source_tree(tmp_path):
+    bert_source = (
+        tmp_path
+        / "language"
+        / "bert"
+        / "DeepLearningExamples"
+        / "PyTorch"
+        / "LanguageModeling"
+        / "BERT"
+    )
+    bert_source.mkdir(parents=True)
+    (bert_source / "tokenization.py").write_text("fixture\n", encoding="utf-8")
+    (bert_source / "file_utils.py").write_text("fixture\n", encoding="utf-8")
+
+    result = run_script(
+        "scripts/bootstrap_sources.sh",
+        "--verify-bert-source-tree",
+        str(tmp_path),
+    )
+
+    assert "BERT 연결 소스 확인 완료" in result.stdout
 
 
 def test_build_script_reports_the_versioned_image_tag_without_docker_access():

@@ -11,6 +11,7 @@ EXPECTED_MANIFEST = {
     "hami_release": "v2.9.0",
     "hami_commit": "3a006c6ae2f077a2683df7805c43656c07f6dc15",
     "hami_core_commit": "5091a2fbe1816df1265490f771346730f29e2c8d",
+    "deep_learning_examples_commit": "b03375bd6c2c5233130e61a3be49e26d1a20ac7c",
     "mlperf_release": "v5.1.1",
     "mlperf_commit": "6776245e99dce0600cfc9a6fb61efd310f87de3d",
 }
