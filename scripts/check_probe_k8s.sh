@@ -90,12 +90,16 @@ $IMAGE_PULL_SECRETS
               left = torch.randn((4096, 4096), device="cuda")
               right = torch.randn((4096, 4096), device="cuda")
               torch.cuda.synchronize()
+              check_seconds = 10
+              operations = 0
               started = time.perf_counter()
-              for _ in range(100):
+              while time.perf_counter() - started < check_seconds:
                   result = torch.mm(left, right)
-              torch.cuda.synchronize()
+                  torch.cuda.synchronize()
+                  operations += 1
               print("GPU:", torch.cuda.get_device_name(0), flush=True)
               print("짧은 GPU 연산 시간(초):", round(time.perf_counter() - started, 3), flush=True)
+              print("GPU 연산 횟수:", operations, flush=True)
               print("연산 결과 크기:", tuple(result.shape), flush=True)
           env:
             - name: LD_PRELOAD
