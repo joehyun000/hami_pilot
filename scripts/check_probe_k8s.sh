@@ -90,7 +90,7 @@ $IMAGE_PULL_SECRETS
               left = torch.randn((4096, 4096), device="cuda")
               right = torch.randn((4096, 4096), device="cuda")
               torch.cuda.synchronize()
-              check_seconds = 10
+              check_seconds = 45
               operations = 0
               started = time.perf_counter()
               while time.perf_counter() - started < check_seconds:
