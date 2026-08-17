@@ -28,6 +28,8 @@ for variable_name in "${required_variables[@]}"; do
 done
 
 KANIKO_IMAGE="${PILOT_KANIKO_IMAGE:-gcr.io/kaniko-project/executor:v1.23.2}"
+REGISTRY_SECRET="${PILOT_REGISTRY_SECRET:-}"
+REGISTRY_INSECURE="${PILOT_REGISTRY_INSECURE:-false}"
 PROBE_IMAGE="$PILOT_REGISTRY/hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0"
 VANILLA_IMAGE="$PILOT_REGISTRY/hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0-vanilla"
 
@@ -39,6 +41,44 @@ fi
 if [[ $# -ne 0 ]]; then
   printf '사용법: scripts/build_images_k8s.sh [--print-tags]\n' >&2
   exit 2
+fi
+
+case "$REGISTRY_INSECURE" in
+  true)
+    KANIKO_REGISTRY_ARGS=$'            - --insecure\n            - --skip-tls-verify'
+    ;;
+  false)
+    KANIKO_REGISTRY_ARGS=""
+    ;;
+  *)
+    printf 'PILOT_REGISTRY_INSECURE는 true 또는 false여야 합니다.\n' >&2
+    exit 1
+    ;;
+esac
+
+if [[ "$PILOT_REGISTRY" == ghcr.io/* && -z "$REGISTRY_SECRET" ]]; then
+  printf 'GitHub 이미지 업로드에 PILOT_REGISTRY_SECRET 값이 필요합니다.\n' >&2
+  exit 1
+fi
+
+REGISTRY_VOLUME_MOUNT=""
+REGISTRY_VOLUME=""
+if [[ -n "$REGISTRY_SECRET" ]]; then
+  REGISTRY_VOLUME_MOUNT=$(cat <<YAML
+            - name: registry-auth
+              mountPath: /kaniko/.docker
+              readOnly: true
+YAML
+)
+  REGISTRY_VOLUME=$(cat <<YAML
+        - name: registry-auth
+          secret:
+            secretName: $REGISTRY_SECRET
+            items:
+              - key: .dockerconfigjson
+                path: config.json
+YAML
+)
 fi
 
 SOURCE_MANIFEST="$PILOT_ROOT/artifacts/source_manifest.json"
@@ -87,17 +127,18 @@ spec:
             - --dockerfile=$POD_CONTEXT/docker/Dockerfile.bert
             - --build-arg=HAMI_CORE_SOURCE=$hami_source
             - --destination=$destination
-            - --insecure
-            - --skip-tls-verify
+$KANIKO_REGISTRY_ARGS
           volumeMounts:
             - name: shared-storage
               mountPath: /workspace
               readOnly: true
+$REGISTRY_VOLUME_MOUNT
       volumes:
         - name: shared-storage
           nfs:
             server: $PILOT_NFS_SERVER
             path: $PILOT_NFS_ROOT
+$REGISTRY_VOLUME
 YAML
 
   if ! kubectl -n "$PILOT_K8S_NAMESPACE" wait \
@@ -123,5 +164,5 @@ build_image \
   .cache/sources/HAMi-core-5091a2f-vanilla \
   "$VANILLA_IMAGE"
 
-printf '\n두 이미지가 내부 저장소에 등록됐습니다.\n'
+printf '\n두 이미지가 설정한 저장소에 등록됐습니다.\n'
 printf '측정용: %s\n비교용: %s\n' "$PROBE_IMAGE" "$VANILLA_IMAGE"

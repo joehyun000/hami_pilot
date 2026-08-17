@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import subprocess
@@ -90,7 +91,7 @@ def test_build_script_distinguishes_probe_and_vanilla_images_for_overhead_ablati
     }
 
 
-def test_kubernetes_build_script_reports_internal_registry_tags():
+def test_kubernetes_build_script_reports_configured_registry_tags():
     result = run_script(
         "scripts/build_images_k8s.sh",
         "--print-tags",
@@ -107,6 +108,96 @@ def test_kubernetes_build_script_reports_internal_registry_tags():
         "probe": "registry.example.test:5000/hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0",
         "vanilla": "registry.example.test:5000/hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0-vanilla",
     }
+
+
+def test_kubernetes_scripts_support_an_authenticated_https_registry():
+    build_script = (ROOT / "scripts/build_images_k8s.sh").read_text(encoding="utf-8")
+    check_script = (ROOT / "scripts/check_probe_k8s.sh").read_text(encoding="utf-8")
+    example = (ROOT / "configs/k8s.env.example").read_text(encoding="utf-8")
+
+    assert "PILOT_REGISTRY_SECRET" in build_script
+    assert "/kaniko/.docker" in build_script
+    assert "PILOT_REGISTRY_INSECURE" in build_script
+    assert "PILOT_REGISTRY_SECRET" in check_script
+    assert "imagePullSecrets:" in check_script
+    assert 'PILOT_REGISTRY="ghcr.io/your-account"' in example
+    assert 'PILOT_REGISTRY_SECRET="hami-pilot-registry"' in example
+    assert 'PILOT_REGISTRY_INSECURE="false"' in example
+
+
+def test_registry_auth_script_uses_hidden_input_and_stdin_not_password_arguments():
+    script = (ROOT / "scripts/configure_registry_auth_k8s.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "read -r -s" in script
+    assert ".dockerconfigjson" in script
+    assert "kubectl apply -f -" in script
+    assert "--docker-password" not in script
+
+
+def test_registry_auth_script_does_not_echo_the_token(tmp_path):
+    captured_manifest = tmp_path / "secret.yaml"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_kubectl = fake_bin / "kubectl"
+    fake_kubectl.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$*" == *"apply -f -"* ]]; then
+  cat > "$CAPTURED_MANIFEST"
+  exit 0
+fi
+if [[ "$*" == *"get secret"* ]]; then
+  printf 'kubernetes.io/dockerconfigjson'
+  exit 0
+fi
+exit 1
+""",
+        encoding="utf-8",
+    )
+    fake_kubectl.chmod(0o755)
+
+    env_file = tmp_path / "k8s.env"
+    env_file.write_text(
+        "\n".join(
+            (
+                'PILOT_K8S_NAMESPACE="test-namespace"',
+                'PILOT_REGISTRY="ghcr.io/test-user"',
+                'PILOT_REGISTRY_USERNAME="test-user"',
+                'PILOT_REGISTRY_SECRET="registry-auth"',
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    token = "test-token-must-stay-hidden"
+
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/configure_registry_auth_k8s.sh")],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        input=token + "\n",
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "PILOT_K8S_ENV_FILE": str(env_file),
+            "CAPTURED_MANIFEST": str(captured_manifest),
+        },
+    )
+
+    assert token not in result.stdout
+    assert token not in result.stderr
+    encoded = next(
+        line.split(":", 1)[1].strip()
+        for line in captured_manifest.read_text(encoding="utf-8").splitlines()
+        if line.strip().startswith(".dockerconfigjson:")
+    )
+    docker_config = json.loads(base64.b64decode(encoded))
+    assert docker_config["auths"]["ghcr.io"]["username"] == "test-user"
+    assert docker_config["auths"]["ghcr.io"]["password"] == token
 
 
 def test_kubernetes_probe_check_uses_one_gpu_and_a_fifty_percent_limit():
@@ -177,6 +268,7 @@ def test_shell_scripts_are_valid_bash_programs():
         "scripts/build_images.sh",
         "scripts/build_images_k8s.sh",
         "scripts/check_probe_k8s.sh",
+        "scripts/configure_registry_auth_k8s.sh",
         "scripts/run_gpu_pilot.sh",
     ):
         subprocess.run(["bash", "-n", str(ROOT / relative_path)], check=True)

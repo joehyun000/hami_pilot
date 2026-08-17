@@ -37,6 +37,7 @@ case "$PILOT_ROOT" in
 esac
 
 PROBE_IMAGE="$PILOT_REGISTRY/hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0"
+REGISTRY_SECRET="${PILOT_REGISTRY_SECRET:-}"
 JOB_NAME="hami-pilot-check-probe"
 ATTEMPT_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 OUTPUT_RELATIVE="$CONTEXT_RELATIVE/artifacts/k8s-probe-check/$ATTEMPT_ID"
@@ -44,6 +45,15 @@ OUTPUT_DIR="$PILOT_NFS_ROOT/$OUTPUT_RELATIVE"
 PROBE_FILE="$OUTPUT_DIR/hami_probe.jsonl"
 
 mkdir -p "$OUTPUT_DIR"
+
+IMAGE_PULL_SECRETS=""
+if [[ -n "$REGISTRY_SECRET" ]]; then
+  IMAGE_PULL_SECRETS=$(cat <<YAML
+      imagePullSecrets:
+        - name: $REGISTRY_SECRET
+YAML
+)
+fi
 
 printf '측정용 이미지로 짧은 GPU 연산을 시작합니다.\n'
 printf '이 검사는 BERT 실험 결과가 아니라 HAMi 연결 확인용입니다.\n'
@@ -61,6 +71,7 @@ spec:
   template:
     spec:
       restartPolicy: Never
+$IMAGE_PULL_SECRETS
       nodeSelector:
         kubernetes.io/hostname: $PILOT_K8S_BUILD_NODE
       containers:
