@@ -7,13 +7,16 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 
 
-def run_script(path: str, argument: str) -> subprocess.CompletedProcess[str]:
+def run_script(
+    path: str, argument: str, *, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["bash", str(ROOT / path), argument],
         cwd=ROOT,
         check=True,
         capture_output=True,
         text=True,
+        env={**os.environ, **(env or {})},
     )
 
 
@@ -87,6 +90,25 @@ def test_build_script_distinguishes_probe_and_vanilla_images_for_overhead_ablati
     }
 
 
+def test_kubernetes_build_script_reports_internal_registry_tags():
+    result = run_script(
+        "scripts/build_images_k8s.sh",
+        "--print-tags",
+        env={
+            "PILOT_K8S_NAMESPACE": "test-namespace",
+            "PILOT_K8S_BUILD_NODE": "test-gpu-node",
+            "PILOT_NFS_SERVER": "nfs.example.test",
+            "PILOT_NFS_ROOT": str(ROOT),
+            "PILOT_REGISTRY": "registry.example.test:5000",
+        },
+    )
+
+    assert json.loads(result.stdout) == {
+        "probe": "registry.example.test:5000/hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0",
+        "vanilla": "registry.example.test:5000/hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0-vanilla",
+    }
+
+
 def test_bert_image_uses_blackwell_compatible_pytorch_and_cuda():
     dockerfile = (ROOT / "docker/Dockerfile.bert").read_text(encoding="utf-8")
 
@@ -143,6 +165,7 @@ def test_shell_scripts_are_valid_bash_programs():
     for relative_path in (
         "scripts/bootstrap_sources.sh",
         "scripts/build_images.sh",
+        "scripts/build_images_k8s.sh",
         "scripts/run_gpu_pilot.sh",
     ):
         subprocess.run(["bash", "-n", str(ROOT / relative_path)], check=True)

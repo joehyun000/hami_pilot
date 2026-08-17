@@ -6,6 +6,7 @@ __pycache__/
 artifacts/
 runs/
 configs/server.env
+configs/k8s.env
 *.egg-info/
 dist/
 build/
