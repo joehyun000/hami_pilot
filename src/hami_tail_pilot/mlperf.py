@@ -52,6 +52,7 @@ def parse_mlperf_summary(
     path: Path,
     *,
     require_valid: bool = True,
+    detail_path: Path | None = None,
 ) -> MLPerfMetrics:
     text = _read_summary(path)
 
@@ -89,9 +90,21 @@ def parse_mlperf_summary(
         completed_match = re.search(
             r"^- Processed\s+(\d+)\s+queries\.\s*$", text, flags=re.MULTILINE
         )
-    if completed_match is None:
+    if completed_match is not None:
+        completed_samples = int(completed_match.group(1))
+    elif detail_path is not None:
+        detail_text = _read_summary(detail_path)
+        detail_match = re.search(
+            r'^:::MLLOG\s+\{[^\n]*"key"\s*:\s*"result_query_count"'
+            r'[^\n]*"value"\s*:\s*(\d+)',
+            detail_text,
+            flags=re.MULTILINE,
+        )
+        if detail_match is None:
+            raise MLPerfLogError("missing completed samples")
+        completed_samples = int(detail_match.group(1))
+    else:
         raise MLPerfLogError("missing completed samples")
-    completed_samples = int(completed_match.group(1))
 
     if not all(
         math.isfinite(value) and value >= 0 for value in (throughput, p50_ns, p99_ns)
@@ -111,8 +124,16 @@ def parse_mlperf_summary(
     )
 
 
-def parse_mlperf_readiness_summary(path: Path) -> MLPerfMetrics:
-    metrics = parse_mlperf_summary(path, require_valid=False)
+def parse_mlperf_readiness_summary(
+    path: Path,
+    *,
+    detail_path: Path | None = None,
+) -> MLPerfMetrics:
+    metrics = parse_mlperf_summary(
+        path,
+        require_valid=False,
+        detail_path=detail_path,
+    )
     if metrics.result_validity == "VALID":
         return metrics
 

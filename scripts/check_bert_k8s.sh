@@ -92,6 +92,7 @@ FEATURE_CACHE_DIR="$BERT_INPUT_DIR/cache"
 FEATURE_CACHE_RELATIVE="$INPUT_RELATIVE/cache"
 FEATURE_CACHE_FILE="$FEATURE_CACHE_DIR/eval_features.pickle"
 SUMMARY_FILE="$OUTPUT_DIR/mlperf_log_summary.txt"
+DETAIL_FILE="$OUTPUT_DIR/mlperf_log_detail.txt"
 PROBE_FILE="$OUTPUT_DIR/hami_probe.jsonl"
 
 mkdir -p "$OUTPUT_DIR" "$FEATURE_CACHE_DIR"
@@ -209,13 +210,17 @@ fi
     "$SUMMARY_FILE" >&2
   exit 1
 }
+[[ -s "$DETAIL_FILE" ]] || {
+  printf 'MLPerf 상세 기록 파일이 없습니다: %s\n' "$DETAIL_FILE" >&2
+  exit 1
+}
 [[ -s "$PROBE_FILE" ]] || {
   printf 'HAMi 확인 파일이 없습니다: %s\n' "$PROBE_FILE" >&2
   exit 1
 }
 
 PYTHONPATH="$PILOT_ROOT/src${PYTHONPATH:+:$PYTHONPATH}" \
-python3 - "$SUMMARY_FILE" "$PROBE_FILE" <<'PY'
+python3 - "$SUMMARY_FILE" "$DETAIL_FILE" "$PROBE_FILE" <<'PY'
 from pathlib import Path
 import sys
 
@@ -223,8 +228,11 @@ from hami_tail_pilot.mlperf import MLPerfLogError, parse_mlperf_readiness_summar
 from hami_tail_pilot.probe import ProbeLogError, parse_probe_jsonl
 
 try:
-    metrics = parse_mlperf_readiness_summary(Path(sys.argv[1]))
-    probe = parse_probe_jsonl(Path(sys.argv[2]))
+    metrics = parse_mlperf_readiness_summary(
+        Path(sys.argv[1]),
+        detail_path=Path(sys.argv[2]),
+    )
+    probe = parse_probe_jsonl(Path(sys.argv[3]))
 except (MLPerfLogError, ProbeLogError) as exc:
     raise SystemExit(str(exc)) from exc
 

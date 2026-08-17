@@ -57,6 +57,27 @@ def test_parse_mlperf_readiness_accepts_a_short_run_that_only_misses_early_stopp
     assert metrics.p99_ms == 28.357917
 
 
+def test_parse_mlperf_readiness_reads_query_count_from_detail_log(tmp_path):
+    summary_text = Path(
+        "tests/fixtures/mlperf_log_summary_short_check.txt"
+    ).read_text(encoding="utf-8")
+    summary_path = tmp_path / "mlperf_log_summary.txt"
+    summary_path.write_text(
+        summary_text.replace("- Processed 38 queries.\n", ""),
+        encoding="utf-8",
+    )
+    detail_path = tmp_path / "mlperf_log_detail.txt"
+    detail_path.write_text(
+        ':::MLLOG {"key": "result_query_count", "value": 38, '
+        '"time_ms": 30001.0}\n',
+        encoding="utf-8",
+    )
+
+    metrics = parse_mlperf_readiness_summary(summary_path, detail_path=detail_path)
+
+    assert metrics.completed_samples == 38
+
+
 def test_parse_mlperf_readiness_rejects_a_short_run_with_failed_constraints(tmp_path):
     summary = Path("tests/fixtures/mlperf_log_summary_short_check.txt").read_text(
         encoding="utf-8"
