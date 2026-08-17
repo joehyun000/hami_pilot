@@ -20,9 +20,11 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY .cache/sources/inference-v5.1.1 /opt/mlperf/inference
 RUN python3 -m pip install --no-cache-dir \
-      "absl-py>=2,<3" "numpy<2" "pybind11>=2.12,<3" "transformers==4.46.3" \
+      "absl-py>=2,<3" "boto3==1.35.99" "numpy<2" \
+      "pybind11>=2.12,<3" "transformers==4.46.3" \
     && python3 -m pip install --no-cache-dir /opt/mlperf/inference/loadgen
 COPY --from=hami-builder /src/HAMi-core/build/libvgpu.so /opt/hami/libvgpu.so
 WORKDIR /opt/mlperf/inference/language/bert
+RUN python3 -c "import tokenization"
 ENV LD_PRELOAD=/opt/hami/libvgpu.so
 ENTRYPOINT ["python3", "run.py"]

@@ -13,16 +13,21 @@ wait_for_k8s_job() {
   while ((SECONDS <= deadline)); do
     if ! status="$(
       kubectl -n "$namespace" get job "$job_name" \
-        -o jsonpath='{.status.succeeded}{" "}{.status.failed}'
+        -o jsonpath='{.status.succeeded}{"|"}{.status.failed}'
     )"; then
       printf '작업 상태를 확인하지 못했습니다: %s/%s\n' \
         "$namespace" "$job_name" >&2
       return 2
     fi
 
-    read -r succeeded failed <<<"$status"
+    IFS='|' read -r succeeded failed <<<"$status"
     succeeded="${succeeded:-0}"
     failed="${failed:-0}"
+    if [[ ! "$succeeded" =~ ^[0-9]+$ || ! "$failed" =~ ^[0-9]+$ ]]; then
+      printf '작업 상태 값을 이해하지 못했습니다: %s\n' \
+        "$status" >&2
+      return 2
+    fi
     if ((succeeded >= 1)); then
       printf '작업이 완료됐습니다: %s/%s\n' "$namespace" "$job_name"
       return 0

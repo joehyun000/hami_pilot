@@ -260,6 +260,8 @@ def test_bert_image_uses_blackwell_compatible_pytorch_and_cuda():
 
     assert "nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04" in dockerfile
     assert "pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime" in dockerfile
+    assert '"boto3==1.35.99"' in dockerfile
+    assert 'python3 -c "import tokenization"' in dockerfile
 
 
 def test_bert_input_download_script_reports_pinned_sources_and_checksums():
@@ -321,7 +323,7 @@ def test_kubernetes_job_wait_stops_immediately_when_the_job_has_failed(tmp_path)
     fake_kubectl.write_text(
         """#!/usr/bin/env bash
 set -euo pipefail
-printf '0 1'
+printf '|1'
 """,
         encoding="utf-8",
     )
@@ -331,7 +333,7 @@ printf '0 1'
         [
             "bash",
             "-c",
-            'source "$1"; wait_for_k8s_job test-namespace test-job 30 0',
+            'source "$1"; wait_for_k8s_job test-namespace test-job 1 0',
             "test",
             str(ROOT / "scripts/lib/k8s_job_wait.sh"),
         ],
