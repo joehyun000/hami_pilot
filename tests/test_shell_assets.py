@@ -314,6 +314,37 @@ def test_kubernetes_single_bert_check_uses_a_low_request_rate_and_no_limit_wait(
     assert "nvidia.com/gpu: 1" in script
 
 
+def test_kubernetes_job_wait_stops_immediately_when_the_job_has_failed(tmp_path):
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_kubectl = fake_bin / "kubectl"
+    fake_kubectl.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf '0 1'
+""",
+        encoding="utf-8",
+    )
+    fake_kubectl.chmod(0o755)
+
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'source "$1"; wait_for_k8s_job test-namespace test-job 30 0',
+            "test",
+            str(ROOT / "scripts/lib/k8s_job_wait.sh"),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}"},
+    )
+
+    assert result.returncode == 1
+    assert "실패했습니다" in result.stderr
+
+
 def test_gpu_pilot_prepare_dry_run_stops_after_the_short_condition_check(tmp_path):
     env_file = write_server_env(tmp_path)
 
@@ -368,6 +399,7 @@ def test_shell_scripts_are_valid_bash_programs():
         "scripts/check_bert_k8s.sh",
         "scripts/configure_registry_auth_k8s.sh",
         "scripts/download_bert_inputs.sh",
+        "scripts/lib/k8s_job_wait.sh",
         "scripts/run_gpu_pilot.sh",
     ):
         subprocess.run(["bash", "-n", str(ROOT / relative_path)], check=True)

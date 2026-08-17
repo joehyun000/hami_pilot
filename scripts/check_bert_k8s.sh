@@ -5,6 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PILOT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="${PILOT_K8S_ENV_FILE:-$PILOT_ROOT/configs/k8s.env}"
 
+# shellcheck source=lib/k8s_job_wait.sh
+source "$SCRIPT_DIR/lib/k8s_job_wait.sh"
+
 if [[ -f "$ENV_FILE" ]]; then
   set -a
   # shellcheck disable=SC1090
@@ -185,8 +188,8 @@ $IMAGE_PULL_SECRETS
             path: $PILOT_NFS_ROOT
 YAML
 
-if ! kubectl -n "$PILOT_K8S_NAMESPACE" wait \
-  --for=condition=complete "job/$JOB_NAME" --timeout=21m; then
+if ! wait_for_k8s_job \
+  "$PILOT_K8S_NAMESPACE" "$JOB_NAME" 1260 5; then
   kubectl -n "$PILOT_K8S_NAMESPACE" logs \
     "job/$JOB_NAME" --all-containers=true || true
   kubectl -n "$PILOT_K8S_NAMESPACE" describe "job/$JOB_NAME" || true
