@@ -102,6 +102,8 @@ $IMAGE_PULL_SECRETS
               print("GPU 연산 횟수:", operations, flush=True)
               print("연산 결과 크기:", tuple(result.shape), flush=True)
           env:
+            - name: LIBCUDA_LOG_LEVEL
+              value: "3"
             - name: LD_PRELOAD
               value: /opt/hami/libvgpu.so
             - name: CUDA_DEVICE_SM_LIMIT

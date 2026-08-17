@@ -210,6 +210,8 @@ def test_kubernetes_probe_check_uses_one_gpu_and_a_fifty_percent_limit():
     assert 'waited_calls' in script
     assert "check_seconds = 10" in script
     assert "while time.perf_counter() - started < check_seconds:" in script
+    assert 'name: LIBCUDA_LOG_LEVEL' in script
+    assert 'value: "3"' in script
 
 
 def test_bert_image_uses_blackwell_compatible_pytorch_and_cuda():
