@@ -221,6 +221,29 @@ def test_bert_image_uses_blackwell_compatible_pytorch_and_cuda():
     assert "pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime" in dockerfile
 
 
+def test_bert_input_download_script_reports_pinned_sources_and_checksums():
+    result = run_script("scripts/download_bert_inputs.sh", "--print-manifest")
+
+    assert json.loads(result.stdout) == {
+        "dev-v1.1.json": {
+            "md5": "3e85deb501d4e538b6bc56f786231552",
+            "url": "https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json",
+        },
+        "model.pytorch": {
+            "md5": "00fbcbfaebfa20d87ac9885120a6e9b4",
+            "url": "https://zenodo.org/records/3733896/files/model.pytorch?download=1",
+        },
+        "vocab.txt": {
+            "md5": "64800d5d8528ce344256daf115d4965e",
+            "url": "https://zenodo.org/records/3733896/files/vocab.txt?download=1",
+        },
+    }
+
+    script = (ROOT / "scripts/download_bert_inputs.sh").read_text(encoding="utf-8")
+    assert ".part" in script
+    assert "md5sum" in script
+
+
 def test_gpu_pilot_prepare_dry_run_stops_after_the_short_condition_check(tmp_path):
     env_file = write_server_env(tmp_path)
 
@@ -273,6 +296,7 @@ def test_shell_scripts_are_valid_bash_programs():
         "scripts/build_images_k8s.sh",
         "scripts/check_probe_k8s.sh",
         "scripts/configure_registry_auth_k8s.sh",
+        "scripts/download_bert_inputs.sh",
         "scripts/run_gpu_pilot.sh",
     ):
         subprocess.run(["bash", "-n", str(ROOT / relative_path)], check=True)
