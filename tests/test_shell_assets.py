@@ -330,8 +330,9 @@ def test_kubernetes_single_bert_check_uses_a_low_request_rate_and_no_limit_wait(
     )
 
     assert json.loads(result.stdout) == {
+        "hami_log_level": 2,
         "image": "ghcr.io/test-user/hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0",
-        "measurement_seconds": 30,
+        "measurement_seconds": 120,
         "node": "test-gpu-node",
         "sm_limit": 100,
         "target_qps": 1,
@@ -362,8 +363,9 @@ def test_kubernetes_single_bert_check_can_plan_a_limited_candidate():
 
     assert json.loads(result.stdout) == {
         "expect_wait": True,
+        "hami_log_level": 2,
         "image": "ghcr.io/test-user/hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0",
-        "measurement_seconds": 30,
+        "measurement_seconds": 120,
         "node": "test-gpu-node",
         "sm_limit": 50,
         "target_qps": 5,

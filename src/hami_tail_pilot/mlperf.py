@@ -18,6 +18,7 @@ class MLPerfMetrics:
     p99_ms: float
     completed_samples: int
     scheduled_samples_per_second: float | None = None
+    performance_constraints_satisfied: bool | None = None
 
 
 _NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
@@ -78,6 +79,16 @@ def parse_mlperf_summary(
     scheduled_throughput = (
         float(scheduled_match.group(1)) if scheduled_match is not None else None
     )
+    performance_match = re.search(
+        r"^\s*Performance constraints satisfied\s*:\s*(Yes|NO)\s*$",
+        text,
+        flags=re.MULTILINE | re.IGNORECASE,
+    )
+    performance_constraints_satisfied = (
+        performance_match.group(1).lower() == "yes"
+        if performance_match is not None
+        else None
+    )
     p50_ns = float(
         _extract(
             text,
@@ -135,6 +146,7 @@ def parse_mlperf_summary(
         p99_ms=p99_ns / 1_000_000,
         completed_samples=completed_samples,
         scheduled_samples_per_second=scheduled_throughput,
+        performance_constraints_satisfied=performance_constraints_satisfied,
     )
 
 
@@ -164,4 +176,33 @@ def parse_mlperf_readiness_summary(
         for pattern in required_patterns
     ):
         raise MLPerfLogError("short readiness run failed for a reason other than early stopping")
+    return metrics
+
+
+def parse_mlperf_candidate_summary(
+    path: Path,
+    *,
+    detail_path: Path | None = None,
+) -> MLPerfMetrics:
+    metrics = parse_mlperf_summary(
+        path,
+        require_valid=False,
+        detail_path=detail_path,
+    )
+    if metrics.result_validity == "VALID":
+        return metrics
+
+    text = _read_summary(path)
+    required_patterns = (
+        r"^\s*Min duration satisfied\s*:\s*Yes\s*$",
+        r"^\s*Min queries satisfied\s*:\s*Yes\s*$",
+        r"^No errors encountered during test\.\s*$",
+    )
+    if not all(
+        re.search(pattern, text, flags=re.MULTILINE) is not None
+        for pattern in required_patterns
+    ):
+        raise MLPerfLogError("candidate run did not complete cleanly")
+    if metrics.performance_constraints_satisfied is None:
+        raise MLPerfLogError("missing performance constraint result")
     return metrics

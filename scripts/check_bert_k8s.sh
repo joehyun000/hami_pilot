@@ -36,6 +36,7 @@ BERT_INPUT_DIR="${PILOT_BERT_INPUT_DIR:-$PILOT_NFS_ROOT/johyeon/hami-tail-pilot/
 TARGET_QPS=1
 WARMUP_SECONDS=60
 MEASUREMENT_SECONDS=120
+HAMI_LOG_LEVEL=2
 SM_LIMIT=100
 EXPECT_WAIT=false
 PRINT_PLAN=false
@@ -88,6 +89,7 @@ print_plan() {
     printf '  "expect_wait": true,\n'
   fi
   printf '%s\n' \
+    "  \"hami_log_level\": $HAMI_LOG_LEVEL," \
     "  \"image\": \"$PROBE_IMAGE\"," \
     "  \"measurement_seconds\": $MEASUREMENT_SECONDS," \
     "  \"node\": \"$PILOT_K8S_BUILD_NODE\"," \
@@ -203,7 +205,7 @@ $IMAGE_PULL_SECRETS
                 --user_conf=/output/user.conf
           env:
             - name: LIBCUDA_LOG_LEVEL
-              value: "3"
+              value: "$HAMI_LOG_LEVEL"
             - name: LD_PRELOAD
               value: /opt/hami/libvgpu.so
             - name: CUDA_DEVICE_SM_LIMIT
@@ -284,11 +286,11 @@ python3 - "$SUMMARY_FILE" "$DETAIL_FILE" "$PROBE_FILE" \
 from pathlib import Path
 import sys
 
-from hami_tail_pilot.mlperf import MLPerfLogError, parse_mlperf_readiness_summary
+from hami_tail_pilot.mlperf import MLPerfLogError, parse_mlperf_candidate_summary
 from hami_tail_pilot.probe import ProbeLogError, parse_probe_jsonl
 
 try:
-    metrics = parse_mlperf_readiness_summary(
+    metrics = parse_mlperf_candidate_summary(
         Path(sys.argv[1]),
         detail_path=Path(sys.argv[2]),
     )
@@ -322,6 +324,8 @@ elif probe.waited_calls != 0 or probe.wait_ns != 0:
 
 if metrics.result_validity == "INVALID":
     print("짧은 확인이라 공식 MLPerf 조기 종료 필요 요청 수는 충족하지 않았습니다.")
+if metrics.performance_constraints_satisfied is False:
+    print("미리 정한 응답시간 목표를 충족하지 못했습니다.")
 print("완료된 BERT 요청 수:", metrics.completed_samples)
 print("실제로 요청을 보낸 속도:", round(metrics.scheduled_samples_per_second, 3))
 print("초당 완료 요청 수:", round(metrics.completed_samples_per_second, 3))
