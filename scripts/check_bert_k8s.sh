@@ -210,7 +210,7 @@ $IMAGE_PULL_SECRETS
               value: "$SM_LIMIT"
 $UTILIZATION_POLICY
             - name: CUDA_DEVICE_MEMORY_SHARED_CACHE
-              value: /output/victim.cache
+              value: /hami-cache/victim.cache
             - name: HAMI_PROBE_OUTPUT
               value: /output/hami_probe.jsonl
             - name: HAMI_WARMUP_SECONDS
@@ -227,6 +227,8 @@ $UTILIZATION_POLICY
             limits:
               nvidia.com/gpu: 1
           volumeMounts:
+            - name: hami-cache
+              mountPath: /hami-cache
             - name: shared-storage
               mountPath: /inputs
               subPath: $INPUT_RELATIVE
@@ -238,6 +240,8 @@ $UTILIZATION_POLICY
               mountPath: /output
               subPath: $OUTPUT_RELATIVE
       volumes:
+        - name: hami-cache
+          emptyDir: {}
         - name: shared-storage
           nfs:
             server: $PILOT_NFS_SERVER
