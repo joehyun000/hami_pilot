@@ -52,6 +52,13 @@ while [[ $# -gt 0 ]]; do
       EXPECT_WAIT=true
       shift 2
       ;;
+    --full)
+      [[ $# -ge 2 ]] || { printf '사용법 오류\n' >&2; exit 2; }
+      TARGET_QPS="$2"
+      SM_LIMIT=100
+      EXPECT_WAIT=false
+      shift 2
+      ;;
     --print-plan)
       PRINT_PLAN=true
       shift
