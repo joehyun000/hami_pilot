@@ -35,7 +35,7 @@ REGISTRY_SECRET="${PILOT_REGISTRY_SECRET:-}"
 BERT_INPUT_DIR="${PILOT_BERT_INPUT_DIR:-$PILOT_NFS_ROOT/johyeon/hami-tail-pilot/inputs/bert}"
 TARGET_QPS=1
 WARMUP_SECONDS=60
-MEASUREMENT_SECONDS=30
+MEASUREMENT_SECONDS=120
 SM_LIMIT=100
 EXPECT_WAIT=false
 PRINT_PLAN=false
@@ -195,6 +195,8 @@ $IMAGE_PULL_SECRETS
                 --scenario=Server \
                 --user_conf=/output/user.conf
           env:
+            - name: LIBCUDA_LOG_LEVEL
+              value: "3"
             - name: LD_PRELOAD
               value: /opt/hami/libvgpu.so
             - name: CUDA_DEVICE_SM_LIMIT
