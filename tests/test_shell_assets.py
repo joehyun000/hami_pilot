@@ -373,6 +373,66 @@ def test_kubernetes_single_bert_check_can_plan_a_limited_candidate():
     }
 
 
+def test_kubernetes_neighbor_check_can_plan_only_the_measured_job_limited():
+    result = run_script(
+        "scripts/check_bert_neighbor_k8s.sh",
+        "--victim-limited",
+        "28",
+        "--print-plan",
+        env={
+            "PILOT_K8S_NAMESPACE": "test-namespace",
+            "PILOT_K8S_BUILD_NODE": "test-gpu-node",
+            "PILOT_NFS_SERVER": "nfs.example.test",
+            "PILOT_NFS_ROOT": "/shared",
+            "PILOT_REGISTRY": "ghcr.io/test-user",
+        },
+    )
+
+    assert json.loads(result.stdout) == {
+        "hami_log_level": 2,
+        "image": "ghcr.io/test-user/hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0",
+        "measurement_seconds": 120,
+        "neighbor_measurement_seconds": 240,
+        "neighbor_sm_limit": 100,
+        "neighbor_wait_expected": False,
+        "node": "test-gpu-node",
+        "target_qps": 28,
+        "victim_sm_limit": 50,
+        "victim_wait_expected": True,
+        "warmup_seconds": 60,
+    }
+
+
+def test_kubernetes_neighbor_check_can_plan_both_jobs_limited():
+    result = run_script(
+        "scripts/check_bert_neighbor_k8s.sh",
+        "--both-limited",
+        "28",
+        "--print-plan",
+        env={
+            "PILOT_K8S_NAMESPACE": "test-namespace",
+            "PILOT_K8S_BUILD_NODE": "test-gpu-node",
+            "PILOT_NFS_SERVER": "nfs.example.test",
+            "PILOT_NFS_ROOT": "/shared",
+            "PILOT_REGISTRY": "ghcr.io/test-user",
+        },
+    )
+
+    assert json.loads(result.stdout) == {
+        "hami_log_level": 2,
+        "image": "ghcr.io/test-user/hami-tail-bert:mlperf-v5.1.1-hami-v2.9.0",
+        "measurement_seconds": 120,
+        "neighbor_measurement_seconds": 240,
+        "neighbor_sm_limit": 50,
+        "neighbor_wait_expected": True,
+        "node": "test-gpu-node",
+        "target_qps": 28,
+        "victim_sm_limit": 50,
+        "victim_wait_expected": True,
+        "warmup_seconds": 60,
+    }
+
+
 def test_kubernetes_job_wait_stops_immediately_when_the_job_has_failed(tmp_path):
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
@@ -456,6 +516,7 @@ def test_shell_scripts_are_valid_bash_programs():
         "scripts/build_images_k8s.sh",
         "scripts/check_probe_k8s.sh",
         "scripts/check_bert_k8s.sh",
+        "scripts/check_bert_neighbor_k8s.sh",
         "scripts/configure_registry_auth_k8s.sh",
         "scripts/download_bert_inputs.sh",
         "scripts/lib/k8s_job_wait.sh",
